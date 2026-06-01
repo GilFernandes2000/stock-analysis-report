@@ -27,7 +27,7 @@ def test_portfolio_insights_with_holdings(mock_stock_service, mock_db):
 
     analysis = MagicMock()
     analysis.stale = False
-    analysis.price = 200.0
+    analysis.display_price = 200.0
     analysis.sector = "Technology"
     analysis.trend.label = "Bullish"
     analysis.sentiment.label = "moderately positive"
@@ -35,7 +35,7 @@ def test_portfolio_insights_with_holdings(mock_stock_service, mock_db):
 
     mock_stock_service.return_value.analyze.return_value = analysis
     service = PortfolioService(mock_db)
-    result = service.get_insights()
+    result = service.get_insights(display_currency="EUR")
 
     assert len(result.holdings) == 1
     assert result.holdings[0].ticker == "AAPL"
@@ -44,3 +44,7 @@ def test_portfolio_insights_with_holdings(mock_stock_service, mock_db):
     assert result.holdings[0].unrealized_pnl == 500.0
     assert result.total_cost_basis == 1500.0
     assert result.total_market_value == 2000.0
+    assert result.display_currency == "EUR"
+    mock_stock_service.return_value.analyze.assert_called_with(
+        "AAPL", display_currency="EUR"
+    )

@@ -30,6 +30,7 @@ class SentimentSummary(BaseModel):
 class AnalystTarget(BaseModel):
     analyst: str | None = None
     price_target: float | None = None
+    native_price_target: float | None = None
     date: str | None = None
 
 
@@ -47,7 +48,16 @@ class StockAnalysisResponse(BaseModel):
     company: str | None = None
     sector: str | None = None
     industry: str | None = None
-    price: float | None = None
+    country: str | None = None
+    exchange: str | None = None
+    currency: str | None = None  # display currency (backward compatible)
+    native_currency: str | None = None
+    native_price: float | None = None
+    display_currency: str = "EUR"
+    display_price: float | None = None
+    currency_note: str | None = None
+    data_source: str = "finviz"
+    price: float | None = None  # same as display_price (backward compatible)
     change: str | None = None
     market_cap: str | None = None
     pe: str | None = None
@@ -76,6 +86,6 @@ class StockAnalysisResponse(BaseModel):
     raw: dict[str, Any] = Field(default_factory=dict)
     stale: bool = False
     disclaimer: str = (
-        "Data sourced from Finviz and is delayed 15-20 minutes. "
+        "Data sourced from Finviz and/or Yahoo Finance and may be delayed. "
         "Not intended for live trading."
     )

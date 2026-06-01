@@ -24,6 +24,7 @@ export interface SentimentSummary {
 export interface AnalystTarget {
   analyst?: string | null;
   price_target?: number | null;
+  native_price_target?: number | null;
   date?: string | null;
 }
 
@@ -41,6 +42,15 @@ export interface StockAnalysis {
   company?: string | null;
   sector?: string | null;
   industry?: string | null;
+  country?: string | null;
+  exchange?: string | null;
+  currency?: string | null;
+  native_currency?: string | null;
+  native_price?: number | null;
+  display_currency?: string;
+  display_price?: number | null;
+  currency_note?: string | null;
+  data_source?: string;
   price?: number | null;
   change?: string | null;
   market_cap?: string | null;
@@ -143,6 +153,7 @@ export interface SectorAllocation {
 }
 
 export interface PortfolioInsights {
+  display_currency?: string;
   holdings: HoldingInsight[];
   total_cost_basis: number;
   total_market_value?: number | null;

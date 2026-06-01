@@ -6,6 +6,7 @@ import type {
   ScreenerResponse,
   StockAnalysis,
 } from "../types";
+import { currencyQueryParam } from "../utils/currency";
 
 async function request<T>(url: string, options?: RequestInit): Promise<T> {
   const res = await fetch(url, options);
@@ -17,11 +18,19 @@ async function request<T>(url: string, options?: RequestInit): Promise<T> {
   return res.json();
 }
 
+function withCurrency(url: string): string {
+  const sep = url.includes("?") ? "&" : "?";
+  return `${url}${sep}${currencyQueryParam()}`;
+}
+
 export const api = {
   health: () => request<{ status: string }>("/api/health"),
 
+  supportedCurrencies: () =>
+    request<{ default: string; supported: string[] }>("/api/currency/supported"),
+
   getStock: (ticker: string) =>
-    request<StockAnalysis>(`/api/stocks/${encodeURIComponent(ticker)}`),
+    request<StockAnalysis>(withCurrency(`/api/stocks/${encodeURIComponent(ticker)}`)),
 
   listScreenerPresets: () =>
     request<Record<string, { label: string; description: string }>>(
@@ -75,5 +84,5 @@ export const api = {
     request<void>(`/api/portfolio/${id}`, { method: "DELETE" }),
 
   portfolioInsights: () =>
-    request<PortfolioInsights>("/api/portfolio/insights"),
+    request<PortfolioInsights>(withCurrency("/api/portfolio/insights")),
 };

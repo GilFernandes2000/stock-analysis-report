@@ -27,6 +27,9 @@ class Settings(BaseSettings):
     portfolio_cron_hour: int = 12
     portfolio_cron_minute: int = 0
 
+    default_display_currency: str = "EUR"
+    supported_display_currencies: list[str] = ["EUR", "USD", "GBP"]
+
 
 settings = Settings()
 
@@ -60,6 +63,30 @@ SCREENER_PRESETS: dict[str, dict] = {
         "description": "Large caps with strong analyst upside potential",
         "filters": ["cap_largeover", "fa_pe_u50"],
         "table": "Valuation",
+        "order": "-marketcap",
+        "limit": 25,
+    },
+    "europe_germany": {
+        "label": "Europe — Germany",
+        "description": "German companies (Finviz ADRs and listings); use .DE suffix for local shares",
+        "filters": ["geo_germany", "cap_midover"],
+        "table": "Overview",
+        "order": "-marketcap",
+        "limit": 25,
+    },
+    "europe_uk": {
+        "label": "Europe — United Kingdom",
+        "description": "UK companies; use .L suffix for London listings (e.g. VOD.L, SHEL.L)",
+        "filters": ["geo_uk", "cap_midover"],
+        "table": "Overview",
+        "order": "-marketcap",
+        "limit": 25,
+    },
+    "europe_france": {
+        "label": "Europe — France",
+        "description": "French companies; use .PA suffix for Euronext Paris (e.g. MC.PA, OR.PA)",
+        "filters": ["geo_france", "cap_midover"],
+        "table": "Overview",
         "order": "-marketcap",
         "limit": 25,
     },

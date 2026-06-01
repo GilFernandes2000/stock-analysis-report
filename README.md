@@ -4,17 +4,20 @@ A Finviz-powered stock analysis dashboard with trend reports, individual stock r
 
 ## Features
 
-- **Stock search** — Full analysis for any ticker: fundamentals, technicals, ownership, news sentiment, analyst targets, and Finviz charts
+- **Stock search** — US tickers (AAPL) and European listings (SAP.DE, VOD.L, MC.PA, ASML.AS, NESN.SW) via Finviz + Yahoo Finance
 - **Screener** — Browse preset Finviz screens (top performers, technical signals, high conviction, analyst favorites)
 - **Trend reports** — Automated screener-based reports with on-demand and scheduled generation
 - **Portfolio tracker** — Add/edit holdings, view P&L, sector allocation, and per-stock trend/sentiment summaries
+- **Display currency** — EUR default (also USD, GBP); UK pence quotes (GBp) normalized automatically
 - **Single-server UI** — React dashboard served by FastAPI on one port
 
 See [Architecture](docs/ARCHITECTURE.md) for system flowcharts and data-flow diagrams.
 
 ## Disclaimer
 
-Data is sourced from [Finviz](https://finviz.com) via unofficial scraping libraries. Quotes are delayed 15–20 minutes. **This tool is for research and analysis only — not for live trading.**
+Data is sourced from [Finviz](https://finviz.com) and [Yahoo Finance](https://finance.yahoo.com). US stocks use Finviz; European local listings use exchange suffixes (`.DE`, `.L`, `.PA`, `.AS`, `.SW`, etc.) via Yahoo Finance. Quotes may be delayed. **Not intended for live trading.**
+
+**European ticker examples:** `SAP.DE` (Germany), `VOD.L` (UK), `MC.PA` (France), `ASML.AS` (Netherlands), `NESN.SW` (Switzerland). Short names like `BMW` resolve to `BMW.DE` automatically.
 
 "People's opinions" in v1 means news headline sentiment (VADER), analyst price targets, and insider activity — not social media sentiment.
 
@@ -64,14 +67,15 @@ Open http://localhost:5173 (proxies `/api` to port 8000).
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/api/health` | Health check |
-| GET | `/api/stocks/{ticker}` | Full stock analysis |
+| GET | `/api/stocks/{ticker}` | Full stock analysis (`?currency=EUR`) |
+| GET | `/api/currency/supported` | Supported display currencies |
 | GET | `/api/screener/presets` | List screener presets |
 | GET | `/api/screener/{preset}` | Run screener preset |
 | GET | `/api/reports` | List reports |
 | GET | `/api/reports/latest` | Latest report per type |
 | POST | `/api/reports/generate` | Generate reports on demand |
 | GET/POST/PUT/DELETE | `/api/portfolio` | Portfolio CRUD |
-| GET | `/api/portfolio/insights` | Portfolio analysis |
+| GET | `/api/portfolio/insights` | Portfolio analysis (`?currency=EUR`) |
 
 ## Scheduled Jobs
 
@@ -104,6 +108,13 @@ stock-analysis-report/
 |----------|---------|-------------|
 | `SERVE_FRONTEND` | `true` | Serve React build from FastAPI |
 | `FRONTEND_DIST_PATH` | `{repo}/frontend/dist` | Path to built frontend |
+| `DEFAULT_DISPLAY_CURRENCY` | `EUR` | Default display currency for prices |
+
+## Currency normalization
+
+Yahoo Finance returns **minor-unit** prices for some UK listings (e.g. `IITU.L` at 3839 GBp = **£38.39**). The backend `CurrencyService` normalizes these to major units before technical analysis, then converts to your selected display currency (EUR, USD, or GBP) using cached yfinance FX rates. Portfolio average cost is always entered in the selected display currency (EUR by default).
+
+See [Architecture — Currency flow](docs/ARCHITECTURE.md#currency-normalization) for the data path diagram.
 
 ## Limitations
 

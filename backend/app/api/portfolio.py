@@ -1,6 +1,7 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.database import get_db
 from app.models.holding import Holding
 from app.schemas.portfolio import (
@@ -9,6 +10,7 @@ from app.schemas.portfolio import (
     HoldingUpdate,
     PortfolioInsightsResponse,
 )
+from app.services.currency_service import CurrencyService
 from app.services.portfolio import PortfolioService
 
 router = APIRouter(prefix="/portfolio", tags=["portfolio"])
@@ -63,9 +65,17 @@ def delete_holding(holding_id: int, db: Session = Depends(get_db)):
 
 
 @router.get("/insights", response_model=PortfolioInsightsResponse)
-def portfolio_insights(db: Session = Depends(get_db)):
+def portfolio_insights(
+    currency: str = Query(default=settings.default_display_currency),
+    db: Session = Depends(get_db),
+):
+    try:
+        display = CurrencyService(db).validate_display_currency(currency)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
     service = PortfolioService(db)
     try:
-        return service.get_insights()
+        return service.get_insights(display_currency=display)
     except Exception as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc

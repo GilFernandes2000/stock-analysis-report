@@ -149,6 +149,40 @@ flowchart TD
     Response --> UI[Portfolio page]
 ```
 
+## Currency normalization
+
+```mermaid
+flowchart LR
+    subgraph fetch [Data sources]
+        Yahoo[Yahoo Finance]
+        Finviz[Finviz US]
+    end
+
+    subgraph normalize [CurrencyService]
+        MinorFix["GBp → GBP ÷100"]
+        FX["FX to display currency"]
+        CacheFX[(api_cache 1h)]
+    end
+
+    subgraph ui [UI]
+        Selector["Header currency selector"]
+        Display["formatMoney in EUR/USD/GBP"]
+        Portfolio["Avg cost in display currency"]
+    end
+
+    Yahoo --> MinorFix
+    Finviz --> MinorFix
+    MinorFix --> FX
+    CacheFX --> FX
+    Selector --> FX
+    FX --> Display
+    Portfolio --> FX
+```
+
+Yahoo returns minor-unit quotes for UK listings (`GBp`, `GBX`). Prices are converted to major units **before** RSI/SMA calculations in `yahoo_client.py`. All API responses include `native_price`, `native_currency`, `display_price`, and `display_currency`. The `price` and `currency` fields mirror display values for backward compatibility.
+
+Portfolio `avg_cost` is stored as a float and interpreted in the user's selected display currency (EUR default).
+
 ## Deployment flow
 
 ```mermaid
@@ -177,6 +211,8 @@ flowchart LR
 | FastAPI routes | `backend/app/api/` | REST endpoints |
 | FinvizService | `backend/app/services/finviz_client.py` | Scrape Finviz + cache |
 | StockAnalysisService | `backend/app/services/stock_analysis.py` | Per-ticker analysis |
+| CurrencyService | `backend/app/services/currency_service.py` | Minor-unit fix + FX conversion |
+| YahooFinanceClient | `backend/app/services/yahoo_client.py` | European listings + normalized prices |
 | ReportBuilder | `backend/app/services/report_builder.py` | Screener-based reports |
 | PortfolioService | `backend/app/services/portfolio.py` | Holdings aggregation |
 | Static mount | `backend/app/static.py` | Serve `frontend/dist` on port 8000 |

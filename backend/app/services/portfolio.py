@@ -1,11 +1,13 @@
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.models.holding import Holding
 from app.schemas.portfolio import (
     HoldingInsight,
     PortfolioInsightsResponse,
     SectorAllocation,
 )
+from app.services.currency_service import CurrencyService
 from app.services.stock_analysis import StockAnalysisService
 
 
@@ -13,11 +15,19 @@ class PortfolioService:
     def __init__(self, db: Session):
         self.db = db
         self.stock_service = StockAnalysisService(db)
+        self.currency = CurrencyService(db)
 
-    def get_insights(self) -> PortfolioInsightsResponse:
+    def get_insights(
+        self, display_currency: str | None = None
+    ) -> PortfolioInsightsResponse:
+        display = self.currency.validate_display_currency(
+            display_currency or settings.default_display_currency
+        )
+
         holdings = self.db.query(Holding).order_by(Holding.ticker).all()
         if not holdings:
             return PortfolioInsightsResponse(
+                display_currency=display,
                 holdings=[],
                 total_cost_basis=0,
                 total_market_value=0,
@@ -40,9 +50,11 @@ class PortfolioService:
             total_cost += cost_basis
 
             try:
-                analysis = self.stock_service.analyze(holding.ticker)
+                analysis = self.stock_service.analyze(
+                    holding.ticker, display_currency=display
+                )
                 stale = stale or analysis.stale
-                current_price = analysis.price
+                current_price = analysis.display_price
                 market_value = (
                     holding.shares * current_price if current_price is not None else None
                 )
@@ -132,6 +144,7 @@ class PortfolioService:
         )
 
         return PortfolioInsightsResponse(
+            display_currency=display,
             holdings=insights,
             total_cost_basis=round(total_cost, 2),
             total_market_value=round(total_market, 2) if total_market else None,

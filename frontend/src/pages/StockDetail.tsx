@@ -4,14 +4,17 @@ import { api } from "../api/client";
 import { LoadingSkeleton } from "../components/LoadingSkeleton";
 import { StaleBadge } from "../components/StaleBadge";
 import { TrendBadge } from "../components/TrendBadge";
+import { useDisplayCurrency } from "../hooks/useDisplayCurrency";
 import { usePageTitle } from "../hooks/usePageTitle";
 import type { StockAnalysis } from "../types";
+import { formatMoney } from "../utils/currency";
 
 type Tab = "overview" | "technicals" | "ownership" | "news" | "chart";
 
 export function StockDetail() {
   const { ticker = "" } = useParams();
   usePageTitle(ticker);
+  const { currency } = useDisplayCurrency();
   const [stock, setStock] = useState<StockAnalysis | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -26,7 +29,7 @@ export function StockDetail() {
       .then(setStock)
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
-  }, [ticker]);
+  }, [ticker, currency]);
 
   const tabs: { id: Tab; label: string }[] = [
     { id: "overview", label: "Overview" },
@@ -68,18 +71,25 @@ export function StockDetail() {
               )}
             </h1>
             <p className="mt-1 text-slate-400">
-              {stock.sector} · {stock.industry}
+              {[stock.country, stock.sector, stock.industry, stock.exchange]
+                .filter(Boolean)
+                .join(" · ")}
             </p>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
             <TrendBadge label={stock.trend.label} />
+            {stock.data_source && (
+              <span className="rounded-full border border-slate-600 bg-slate-800 px-2 py-0.5 text-xs text-slate-300">
+                {stock.data_source === "yahoo" ? "Yahoo Finance" : "Finviz"}
+              </span>
+            )}
             {stock.stale && <StaleBadge />}
           </div>
         </div>
         <div className="mt-4 flex items-baseline gap-4">
-          {stock.price != null && (
+          {stock.display_price != null && (
             <span className="text-4xl font-mono font-bold text-white">
-              ${stock.price.toFixed(2)}
+              {formatMoney(stock.display_price, stock.display_currency ?? currency)}
             </span>
           )}
           {stock.change && (
@@ -94,6 +104,9 @@ export function StockDetail() {
             </span>
           )}
         </div>
+        {stock.currency_note && (
+          <p className="mt-2 text-sm text-slate-500">{stock.currency_note}</p>
+        )}
       </div>
 
       <div className="flex flex-wrap gap-2 border-b border-slate-800 pb-2">
@@ -234,7 +247,11 @@ export function StockDetail() {
               <ul className="space-y-2 text-sm text-slate-300">
                 {stock.analyst_targets.map((t, i) => (
                   <li key={i}>
-                    {t.analyst}: ${t.price_target} ({t.date})
+                    {t.analyst}:{" "}
+                    {t.price_target != null
+                      ? formatMoney(t.price_target, stock.display_currency ?? currency)
+                      : "—"}{" "}
+                    ({t.date})
                   </li>
                 ))}
               </ul>
@@ -244,12 +261,30 @@ export function StockDetail() {
       )}
 
       {tab === "chart" && stock.chart_url && (
-        <div className="overflow-hidden rounded-xl border border-slate-800 bg-white">
-          <img
-            src={stock.chart_url}
-            alt={`${stock.ticker} chart`}
-            className="w-full"
-          />
+        <div className="space-y-4 rounded-xl border border-slate-800 bg-slate-900/40 p-4">
+          {stock.data_source === "yahoo" ? (
+            <>
+              <p className="text-sm text-slate-400">
+                Interactive chart hosted on Yahoo Finance.
+              </p>
+              <a
+                href={stock.chart_url}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-500"
+              >
+                Open {stock.ticker} chart on Yahoo Finance
+              </a>
+            </>
+          ) : (
+            <div className="overflow-hidden rounded-xl bg-white">
+              <img
+                src={stock.chart_url}
+                alt={`${stock.ticker} chart`}
+                className="w-full"
+              />
+            </div>
+          )}
         </div>
       )}
     </div>

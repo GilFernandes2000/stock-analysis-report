@@ -4,9 +4,12 @@ from pydantic import BaseModel, Field
 
 
 class HoldingCreate(BaseModel):
-    ticker: str = Field(min_length=1, max_length=16)
+    ticker: str = Field(min_length=1, max_length=32)
     shares: float = Field(gt=0)
-    avg_cost: float = Field(ge=0)
+    avg_cost: float = Field(
+        ge=0,
+        description="Average cost per share in display currency (default EUR)",
+    )
     notes: str | None = None
 
 
@@ -48,6 +51,7 @@ class SectorAllocation(BaseModel):
 
 
 class PortfolioInsightsResponse(BaseModel):
+    display_currency: str = "EUR"
     holdings: list[HoldingInsight]
     total_cost_basis: float
     total_market_value: float | None

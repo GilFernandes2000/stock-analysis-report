@@ -5,11 +5,14 @@ import { LoadingSkeleton } from "../components/LoadingSkeleton";
 import { SectorChart } from "../components/SectorChart";
 import { StaleBadge } from "../components/StaleBadge";
 import { TrendBadge } from "../components/TrendBadge";
+import { useDisplayCurrency } from "../hooks/useDisplayCurrency";
 import { usePageTitle } from "../hooks/usePageTitle";
 import type { Holding, PortfolioInsights } from "../types";
+import { formatMoney } from "../utils/currency";
 
 export function Portfolio() {
   usePageTitle("Portfolio");
+  const { currency } = useDisplayCurrency();
   const [holdings, setHoldings] = useState<Holding[]>([]);
   const [insights, setInsights] = useState<PortfolioInsights | null>(null);
   const [loading, setLoading] = useState(true);
@@ -46,6 +49,13 @@ export function Portfolio() {
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
   }, []);
+
+  useEffect(() => {
+    if (insights) {
+      loadInsights();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currency]);
 
   function resetForm() {
     setForm({ ticker: "", shares: "", avg_cost: "", notes: "" });
@@ -163,7 +173,7 @@ export function Portfolio() {
             required
             type="number"
             step="any"
-            placeholder="Avg cost"
+            placeholder={`Avg cost (${currency})`}
             value={form.avg_cost}
             onChange={(e) => setForm({ ...form, avg_cost: e.target.value })}
             className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-white"
@@ -219,7 +229,7 @@ export function Portfolio() {
                   </td>
                   <td className="px-4 py-3 text-right font-mono">{h.shares}</td>
                   <td className="px-4 py-3 text-right font-mono">
-                    ${h.avg_cost.toFixed(2)}
+                    {formatMoney(h.avg_cost, currency)}
                   </td>
                   <td className="px-4 py-3 text-slate-400">{h.notes ?? "—"}</td>
                   <td className="px-4 py-3 text-right space-x-3">
@@ -247,19 +257,27 @@ export function Portfolio() {
         <div className="grid gap-6 lg:grid-cols-2">
           <div className="rounded-xl border border-slate-800 bg-slate-900/40 p-6">
             <div className="flex items-center gap-2">
-              <h2 className="text-lg font-semibold text-white">Summary</h2>
+              <h2 className="text-lg font-semibold text-white">
+                Summary ({insights.display_currency ?? currency})
+              </h2>
               {insights.stale && <StaleBadge />}
             </div>
             <div className="mt-4 grid gap-3 sm:grid-cols-2">
               <Stat
                 label="Cost basis"
-                value={`$${insights.total_cost_basis.toLocaleString()}`}
+                value={formatMoney(
+                  insights.total_cost_basis,
+                  insights.display_currency ?? currency
+                )}
               />
               <Stat
                 label="Market value"
                 value={
                   insights.total_market_value != null
-                    ? `$${insights.total_market_value.toLocaleString()}`
+                    ? formatMoney(
+                        insights.total_market_value,
+                        insights.display_currency ?? currency
+                      )
                     : "—"
                 }
               />
@@ -267,7 +285,10 @@ export function Portfolio() {
                 label="Unrealized P&L"
                 value={
                   insights.total_unrealized_pnl != null
-                    ? `$${insights.total_unrealized_pnl.toLocaleString()} (${insights.total_unrealized_pnl_pct}%)`
+                    ? `${formatMoney(
+                        insights.total_unrealized_pnl,
+                        insights.display_currency ?? currency
+                      )} (${insights.total_unrealized_pnl_pct}%)`
                     : "—"
                 }
                 positive={(insights.total_unrealized_pnl ?? 0) >= 0}
@@ -318,7 +339,10 @@ export function Portfolio() {
                     </td>
                     <td className="px-4 py-3 text-right font-mono">
                       {h.current_price != null
-                        ? `$${h.current_price.toFixed(2)}`
+                        ? formatMoney(
+                            h.current_price,
+                            insights.display_currency ?? currency
+                          )
                         : "—"}
                     </td>
                     <td
@@ -329,7 +353,10 @@ export function Portfolio() {
                       }`}
                     >
                       {h.unrealized_pnl != null
-                        ? `$${h.unrealized_pnl.toFixed(2)} (${h.unrealized_pnl_pct}%)`
+                        ? `${formatMoney(
+                            h.unrealized_pnl,
+                            insights.display_currency ?? currency
+                          )} (${h.unrealized_pnl_pct}%)`
                         : "—"}
                     </td>
                     <td className="px-4 py-3">

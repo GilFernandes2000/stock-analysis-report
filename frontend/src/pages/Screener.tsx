@@ -11,6 +11,9 @@ const PRESET_ORDER = [
   "technical_signals",
   "high_conviction",
   "analyst_favorites",
+  "europe_germany",
+  "europe_uk",
+  "europe_france",
 ] as const;
 
 export function Screener() {

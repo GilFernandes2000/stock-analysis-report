@@ -2,6 +2,7 @@ import { FormEvent, useState } from "react";
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { ApiStatusBanner } from "./components/ApiStatusBanner";
 import { DisclaimerBanner } from "./components/DisclaimerBanner";
+import { useDisplayCurrency } from "./hooks/useDisplayCurrency";
 
 const nav = [
   { to: "/", label: "Dashboard" },
@@ -14,6 +15,7 @@ export function App() {
   const location = useLocation();
   const navigate = useNavigate();
   const [query, setQuery] = useState("");
+  const { currency, setCurrency, supported } = useDisplayCurrency();
 
   function handleSearch(e: FormEvent) {
     e.preventDefault();
@@ -35,7 +37,7 @@ export function App() {
               type="text"
               value={query}
               onChange={(e) => setQuery(e.target.value.toUpperCase())}
-              placeholder="Search ticker..."
+              placeholder="AAPL, SAP.DE, VOD.L, MC.PA..."
               className="flex-1 rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-white placeholder:text-slate-500 focus:border-emerald-500 focus:outline-none"
             />
             <button
@@ -45,7 +47,19 @@ export function App() {
               Go
             </button>
           </form>
-          <nav className="flex gap-1 shrink-0">
+          <nav className="flex gap-1 shrink-0 items-center">
+            <select
+              value={currency}
+              onChange={(e) => setCurrency(e.target.value as typeof currency)}
+              className="rounded-lg border border-slate-700 bg-slate-900 px-2 py-2 text-sm text-white focus:border-emerald-500 focus:outline-none"
+              aria-label="Display currency"
+            >
+              {supported.map((code) => (
+                <option key={code} value={code}>
+                  {code}
+                </option>
+              ))}
+            </select>
             {nav.map((item) => {
               const active =
                 item.to === "/"

@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import type { ScreenerStockRow } from "../types";
+import { formatMoney, getDisplayCurrency } from "../utils/currency";
 import { TrendBadge } from "./TrendBadge";
 
 interface StockCardProps {
@@ -9,6 +10,7 @@ interface StockCardProps {
   change?: string | null;
   trendLabel?: string;
   extra?: string;
+  currency?: string | null;
 }
 
 export function StockCard({
@@ -18,9 +20,17 @@ export function StockCard({
   change,
   trendLabel,
   extra,
+  currency,
 }: StockCardProps) {
   const changeColor =
     change && change.startsWith("-") ? "text-red-400" : "text-emerald-400";
+
+  const priceLabel =
+    price != null
+      ? typeof price === "number"
+        ? formatMoney(price, currency ?? getDisplayCurrency())
+        : price
+      : null;
 
   return (
     <Link
@@ -37,8 +47,8 @@ export function StockCard({
         {trendLabel && <TrendBadge label={trendLabel} />}
       </div>
       <div className="mt-3 flex items-baseline gap-3">
-        {price != null && (
-          <span className="text-xl font-mono text-white">${price}</span>
+        {priceLabel != null && (
+          <span className="text-xl font-mono text-white">{priceLabel}</span>
         )}
         {change && <span className={`text-sm ${changeColor}`}>{change}</span>}
       </div>
