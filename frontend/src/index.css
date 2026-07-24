@@ -1,5 +1,123 @@
 @import "tailwindcss";
 
+@theme {
+  /* Surfaces */
+  --color-page: #0d0d0d;
+  --color-panel: #1a1a19;
+  --color-raised: #232321;
+  --color-inset: #141413;
+
+  /* Ink */
+  --color-ink: #ffffff;
+  --color-ink2: #c3c2b7;
+  --color-muted: #898781;
+
+  /* Lines */
+  --color-grid: #2c2c2a;
+  --color-edge: #383835;
+
+  /* Brand / interactive */
+  --color-accent: #3987e5;
+  --color-accent-soft: #1c5cab;
+
+  /* Deltas & status (validated for dark surface) */
+  --color-up: #0ca30c;
+  --color-down: #e66767;
+  --color-warn: #fab219;
+  --color-crit: #d03b3b;
+
+  /* Categorical series (dark-mode steps, fixed order) */
+  --color-s1: #3987e5;
+  --color-s2: #008300;
+  --color-s3: #d55181;
+  --color-s4: #c98500;
+  --color-s5: #199e70;
+  --color-s6: #d95926;
+  --color-s7: #9085e9;
+  --color-s8: #e66767;
+
+  --font-sans: system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
 body {
-  @apply bg-slate-950 text-slate-100 min-h-screen;
+  @apply bg-page text-ink2 min-h-screen font-sans antialiased;
+}
+
+.tnum {
+  font-variant-numeric: tabular-nums;
+}
+
+::selection {
+  background: rgba(57, 135, 229, 0.35);
+}
+
+/* Scrollbars that match the terminal look */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #383835 transparent;
+}
+
+/* ------------------------------------------------------------------ */
+/* Print styles: the tearsheet exports to PDF via the browser dialog   */
+/* ------------------------------------------------------------------ */
+@media print {
+  body {
+    background: #ffffff !important;
+    color: #111111 !important;
+  }
+  .no-print {
+    display: none !important;
+  }
+  .print-sheet {
+    color: #111111;
+  }
+  .print-sheet .sheet-panel {
+    border-color: #d7d5cd !important;
+    background: #ffffff !important;
+    break-inside: avoid;
+  }
+  .print-sheet h1,
+  .print-sheet h2,
+  .print-sheet h3,
+  .print-sheet .ink {
+    color: #0b0b0b !important;
+  }
+  .print-sheet .ink2 {
+    color: #33322f !important;
+  }
+  .print-sheet .mut {
+    color: #6b6963 !important;
+  }
+  .print-sheet table {
+    border-color: #d7d5cd !important;
+  }
+  /* Remap dark-theme utility colors onto the white sheet */
+  .print-sheet .text-ink {
+    color: #0b0b0b !important;
+  }
+  .print-sheet .text-ink2 {
+    color: #33322f !important;
+  }
+  .print-sheet .text-muted {
+    color: #6b6963 !important;
+  }
+  .print-sheet .text-up {
+    color: #006300 !important;
+  }
+  .print-sheet .text-down,
+  .print-sheet .text-warn {
+    color: #b02a2a !important;
+  }
+  .print-sheet .border-grid,
+  .print-sheet .border-edge {
+    border-color: #d7d5cd !important;
+  }
+  .print-sheet .bg-panel,
+  .print-sheet .bg-raised,
+  .print-sheet .bg-inset {
+    background: #ffffff !important;
+  }
+  .print-page-break {
+    break-before: page;
+  }
 }

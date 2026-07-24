@@ -37,6 +37,35 @@ export interface InsiderTrade {
   date?: string | null;
 }
 
+export interface InsiderSignal {
+  label: "Bullish" | "Neutral" | "Bearish" | "No activity";
+  score: number;
+  window_days: number;
+  buy_count: number;
+  sell_count: number;
+  buyers: number;
+  sellers: number;
+  buy_value: number;
+  sell_value: number;
+  net_value: number;
+  signals: string[];
+  summary: string;
+}
+
+export interface HoldingInsider {
+  ticker: string;
+  name?: string | null;
+  signal: InsiderSignal;
+}
+
+export interface PortfolioInsiderResponse {
+  portfolio_id: number;
+  as_of: string;
+  holdings: HoldingInsider[];
+  advice: string[];
+  no_data_tickers: string[];
+}
+
 export interface StockAnalysis {
   ticker: string;
   company?: string | null;
@@ -77,6 +106,7 @@ export interface StockAnalysis {
   analyst_targets: AnalystTarget[];
   analyst_upside_pct?: number | null;
   insider_trades: InsiderTrade[];
+  insider_signal?: InsiderSignal | null;
   stale: boolean;
   disclaimer: string;
 }
@@ -102,64 +132,314 @@ export interface ScreenerResponse {
 
 export interface ReportSummary {
   id: number;
+  kind: string;
   report_type: string;
   title: string;
   created_at: string;
+}
+
+export interface MarketReportContent {
+  report_type: string;
+  label: string;
+  description: string;
+  stale: boolean;
+  stocks: Array<Record<string, unknown>>;
+  generated_at: string;
 }
 
 export interface ReportDetail {
   id: number;
+  kind: string;
   report_type: string;
   title: string;
-  content_json: {
-    report_type: string;
-    label: string;
-    description: string;
-    stale: boolean;
-    stocks: Array<Record<string, unknown>>;
-    generated_at: string;
-  };
+  content_json: MarketReportContent | TearsheetContent;
   content_markdown: string;
   created_at: string;
 }
 
-export interface Holding {
+// ---------------------------------------------------------------------------
+// Auth
+// ---------------------------------------------------------------------------
+
+export interface User {
   id: number;
-  ticker: string;
-  shares: number;
-  avg_cost: number;
-  notes?: string | null;
-  added_at: string;
+  username: string;
+  display_name: string;
+  created_at: string;
 }
 
-export interface HoldingInsight {
+export interface AuthResponse {
+  token: string;
+  user: User;
+}
+
+// ---------------------------------------------------------------------------
+// Portfolios & transactions
+// ---------------------------------------------------------------------------
+
+export type TransactionType =
+  | "buy"
+  | "sell"
+  | "dividend"
+  | "deposit"
+  | "withdrawal"
+  | "fee"
+  | "interest"
+  | "tax"
+  | "other";
+
+export interface Portfolio {
+  id: number;
+  name: string;
+  broker: string;
+  base_currency: string;
+  benchmark: string;
+  created_at: string;
+  transaction_count: number;
+}
+
+export interface PortfolioSummary extends Portfolio {
+  market_value?: number | null;
+  total_return?: number | null;
+  total_return_pct?: number | null;
+  day_change_pct?: number | null;
+  position_count: number;
+}
+
+export interface Transaction {
+  id: number;
+  portfolio_id: number;
+  type: TransactionType;
+  date: string;
+  ticker?: string | null;
+  isin?: string | null;
+  name?: string | null;
+  shares?: number | null;
+  price?: number | null;
+  currency?: string | null;
+  amount: number;
+  fees: number;
+  fx_rate?: number | null;
+  note?: string | null;
+  external_id?: string | null;
+  created_at: string;
+}
+
+export interface TransactionCreate {
+  type: TransactionType;
+  date: string;
+  ticker?: string | null;
+  isin?: string | null;
+  name?: string | null;
+  shares?: number | null;
+  price?: number | null;
+  currency?: string | null;
+  amount: number;
+  fees?: number;
+  note?: string | null;
+}
+
+// ---------------------------------------------------------------------------
+// Import
+// ---------------------------------------------------------------------------
+
+export interface ImportRow {
+  type: TransactionType;
+  date: string;
+  ticker?: string | null;
+  isin?: string | null;
+  name?: string | null;
+  shares?: number | null;
+  price?: number | null;
+  currency?: string | null;
+  amount: number;
+  fees: number;
+  fx_rate?: number | null;
+  note?: string | null;
+  external_id?: string | null;
+  duplicate: boolean;
+  ticker_resolved: boolean;
+}
+
+export interface ImportPreview {
+  broker: string;
+  file_kind: string;
+  rows: ImportRow[];
+  total_rows: number;
+  duplicate_count: number;
+  unresolved_isins: string[];
+  warnings: string[];
+}
+
+export interface ImportCommitResult {
+  imported: number;
+  skipped: number;
+}
+
+// ---------------------------------------------------------------------------
+// Analytics
+// ---------------------------------------------------------------------------
+
+export interface Position {
   ticker: string;
+  name?: string | null;
+  isin?: string | null;
   shares: number;
   avg_cost: number;
-  current_price?: number | null;
-  market_value?: number | null;
   cost_basis: number;
+  current_price?: number | null;
+  native_price?: number | null;
+  native_currency?: string | null;
+  market_value?: number | null;
+  weight_pct?: number | null;
   unrealized_pnl?: number | null;
   unrealized_pnl_pct?: number | null;
+  realized_pnl: number;
+  dividends: number;
+  fees: number;
+  day_change_pct?: number | null;
   sector?: string | null;
-  trend_label: string;
-  sentiment_label: string;
+  country?: string | null;
+  trend_label?: string | null;
+  first_bought?: string | null;
 }
 
-export interface SectorAllocation {
-  sector: string;
-  weight_pct: number;
+export interface ClosedPosition {
+  ticker: string;
+  name?: string | null;
+  realized_pnl: number;
+  dividends: number;
+  fees: number;
+}
+
+export interface AllocationSlice {
+  label: string;
   value: number;
+  weight_pct: number;
 }
 
-export interface PortfolioInsights {
-  display_currency?: string;
-  holdings: HoldingInsight[];
-  total_cost_basis: number;
-  total_market_value?: number | null;
-  total_unrealized_pnl?: number | null;
-  total_unrealized_pnl_pct?: number | null;
-  sector_allocation: SectorAllocation[];
+export interface PerformancePoint {
+  date: string;
+  value: number;
+  cost_basis: number;
+  benchmark?: number | null;
+  twr_index?: number | null;
+}
+
+export interface RiskMetrics {
+  volatility_pct?: number | null;
+  sharpe?: number | null;
+  max_drawdown_pct?: number | null;
+  beta?: number | null;
+  twr_pct?: number | null;
+  benchmark_return_pct?: number | null;
+  best_day_pct?: number | null;
+  worst_day_pct?: number | null;
+}
+
+export interface ContributorEntry {
+  ticker: string;
+  name?: string | null;
+  total_pnl: number;
+  return_pct?: number | null;
+}
+
+export interface CashFlowSummary {
+  deposits: number;
+  withdrawals: number;
+  dividends: number;
+  interest: number;
+  fees: number;
+  taxes: number;
+  invested: number;
+  cash_balance: number;
+}
+
+export interface PortfolioAnalytics {
+  portfolio_id: number;
+  name: string;
+  base_currency: string;
+  benchmark: string;
+  as_of: string;
+  market_value: number;
+  cost_basis: number;
+  cash_balance: number;
+  total_value: number;
+  unrealized_pnl: number;
+  unrealized_pnl_pct?: number | null;
+  realized_pnl: number;
+  dividends_received: number;
+  fees_paid: number;
+  total_return: number;
+  total_return_pct?: number | null;
+  day_change?: number | null;
+  day_change_pct?: number | null;
+  positions: Position[];
+  closed_positions: ClosedPosition[];
+  sector_allocation: AllocationSlice[];
+  currency_allocation: AllocationSlice[];
+  country_allocation: AllocationSlice[];
+  performance: PerformancePoint[];
+  risk: RiskMetrics;
+  top_contributors: ContributorEntry[];
+  top_detractors: ContributorEntry[];
+  cash_flows: CashFlowSummary;
   risk_flags: string[];
   stale: boolean;
+}
+
+// ---------------------------------------------------------------------------
+// Tearsheet report
+// ---------------------------------------------------------------------------
+
+export interface HoldingCommentary {
+  ticker: string;
+  name?: string | null;
+  weight_pct?: number | null;
+  text: string;
+}
+
+export interface TearsheetCommentary {
+  executive_summary: string;
+  performance: string;
+  risk: string;
+  allocation: string;
+  holdings: HoldingCommentary[];
+  outlook: string[];
+}
+
+export interface HoldingResearch {
+  ticker: string;
+  trend_label?: string;
+  trend_score?: number;
+  sentiment_label?: string;
+  rsi?: number | null;
+  analyst_upside_pct?: number | null;
+  recommendation?: string | null;
+  pe?: string | null;
+  dividend?: string | null;
+  error?: string;
+}
+
+export interface TearsheetSection {
+  portfolio: PortfolioAnalytics;
+  holdings_analysis: HoldingResearch[];
+  commentary: TearsheetCommentary;
+}
+
+export interface TearsheetContent {
+  kind: "portfolio";
+  title: string;
+  generated_at: string;
+  portfolio_count: number;
+  combined?: {
+    portfolio_names: string[];
+    market_value: number;
+    total_return: number;
+    dividends_received: number;
+    fees_paid: number;
+    mixed_currencies: boolean;
+    base_currency: string;
+  } | null;
+  sections: TearsheetSection[];
 }

@@ -1,9 +1,15 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { api } from "../api/client";
-import { LoadingSkeleton } from "../components/LoadingSkeleton";
-import { StaleBadge } from "../components/StaleBadge";
-import { TrendBadge } from "../components/TrendBadge";
+import { InsiderBadge, InsiderSignalCard } from "../components/InsiderPanel";
+import {
+  Badge,
+  ErrorNote,
+  LoadingSkeleton,
+  Panel,
+  StaleBadge,
+  TrendBadge,
+} from "../components/ui";
 import { useDisplayCurrency } from "../hooks/useDisplayCurrency";
 import { usePageTitle } from "../hooks/usePageTitle";
 import type { StockAnalysis } from "../types";
@@ -44,12 +50,10 @@ export function StockDetail() {
   if (error || !stock) {
     return (
       <div className="space-y-4">
-        <Link to="/" className="text-sm text-emerald-400 hover:underline">
-          ← Back to dashboard
+        <Link to="/" className="text-sm text-accent hover:underline">
+          ← Back
         </Link>
-        <div className="rounded-xl border border-red-500/40 bg-red-500/10 p-6 text-red-300">
-          {error ?? "Stock not found"}
-        </div>
+        <ErrorNote message={error ?? "Stock not found"} />
       </div>
     );
   }
@@ -57,47 +61,46 @@ export function StockDetail() {
   return (
     <div className="space-y-6">
       <div>
-        <Link to="/" className="text-sm text-emerald-400 hover:underline">
-          ← Back to dashboard
-        </Link>
-        <div className="mt-4 flex flex-wrap items-start justify-between gap-4">
+        <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <h1 className="text-3xl font-bold text-white">
+            <h1 className="text-2xl font-bold tracking-tight text-ink">
               {stock.ticker}
               {stock.company && (
-                <span className="ml-3 text-xl font-normal text-slate-400">
+                <span className="ml-3 text-lg font-normal text-ink2">
                   {stock.company}
                 </span>
               )}
             </h1>
-            <p className="mt-1 text-slate-400">
+            <p className="mt-1 text-sm text-muted">
               {[stock.country, stock.sector, stock.industry, stock.exchange]
                 .filter(Boolean)
                 .join(" · ")}
             </p>
           </div>
-          <div className="flex flex-wrap items-center gap-3">
+          <div className="flex flex-wrap items-center gap-2">
             <TrendBadge label={stock.trend.label} />
+            {stock.insider_signal &&
+              stock.insider_signal.label !== "No activity" && (
+                <InsiderBadge signal={stock.insider_signal} />
+              )}
             {stock.data_source && (
-              <span className="rounded-full border border-slate-600 bg-slate-800 px-2 py-0.5 text-xs text-slate-300">
+              <Badge>
                 {stock.data_source === "yahoo" ? "Yahoo Finance" : "Finviz"}
-              </span>
+              </Badge>
             )}
             {stock.stale && <StaleBadge />}
           </div>
         </div>
         <div className="mt-4 flex items-baseline gap-4">
           {stock.display_price != null && (
-            <span className="text-4xl font-mono font-bold text-white">
+            <span className="tnum text-4xl font-bold text-ink">
               {formatMoney(stock.display_price, stock.display_currency ?? currency)}
             </span>
           )}
           {stock.change && (
             <span
-              className={`text-lg ${
-                stock.change.startsWith("-")
-                  ? "text-red-400"
-                  : "text-emerald-400"
+              className={`tnum text-lg ${
+                stock.change.startsWith("-") ? "text-down" : "text-up"
               }`}
             >
               {stock.change}
@@ -105,19 +108,19 @@ export function StockDetail() {
           )}
         </div>
         {stock.currency_note && (
-          <p className="mt-2 text-sm text-slate-500">{stock.currency_note}</p>
+          <p className="mt-2 text-xs text-muted">{stock.currency_note}</p>
         )}
       </div>
 
-      <div className="flex flex-wrap gap-2 border-b border-slate-800 pb-2">
+      <div className="flex flex-wrap gap-1 border-b border-grid">
         {tabs.map((t) => (
           <button
             key={t.id}
             onClick={() => setTab(t.id)}
-            className={`rounded-lg px-4 py-2 text-sm font-medium transition ${
+            className={`-mb-px border-b-2 px-4 py-2.5 text-sm font-medium transition ${
               tab === t.id
-                ? "bg-slate-800 text-white"
-                : "text-slate-400 hover:text-white"
+                ? "border-accent text-ink"
+                : "border-transparent text-muted hover:text-ink2"
             }`}
           >
             {t.label}
@@ -126,29 +129,30 @@ export function StockDetail() {
       </div>
 
       {tab === "overview" && (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          <Metric label="Market Cap" value={stock.market_cap} />
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+          <Metric label="Market cap" value={stock.market_cap} />
           <Metric label="P/E" value={stock.pe} />
           <Metric label="EPS" value={stock.eps} />
           <Metric label="Dividend" value={stock.dividend} />
           <Metric label="Beta" value={stock.beta} />
-          <Metric label="52W High" value={stock.high_52w} />
-          <Metric label="52W Low" value={stock.low_52w} />
-          <Metric label="Perf Week" value={stock.perf_week} />
+          <Metric label="52W high" value={stock.high_52w} />
+          <Metric label="52W low" value={stock.low_52w} />
+          <Metric label="Perf week" value={stock.perf_week} />
+          <Metric label="Perf month" value={stock.perf_month} />
           <Metric label="Perf YTD" value={stock.perf_ytd} />
         </div>
       )}
 
       {tab === "technicals" && (
         <div className="space-y-4">
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
             <Metric label="RSI (14)" value={stock.rsi?.toFixed(2)} />
-            <Metric label="SMA20 dist" value={formatPct(stock.sma20)} />
-            <Metric label="SMA50 dist" value={formatPct(stock.sma50)} />
-            <Metric label="SMA200 dist" value={formatPct(stock.sma200)} />
-            <Metric label="Trend Score" value={String(stock.trend.score)} />
+            <Metric label="vs SMA20" value={formatPct(stock.sma20)} />
+            <Metric label="vs SMA50" value={formatPct(stock.sma50)} />
+            <Metric label="vs SMA200" value={formatPct(stock.sma200)} />
+            <Metric label="Trend score" value={String(stock.trend.score)} />
             <Metric
-              label="Analyst Upside"
+              label="Analyst upside"
               value={
                 stock.analyst_upside_pct != null
                   ? `${stock.analyst_upside_pct > 0 ? "+" : ""}${stock.analyst_upside_pct}%`
@@ -156,42 +160,51 @@ export function StockDetail() {
               }
             />
           </div>
-          <div className="rounded-xl border border-slate-800 bg-slate-900/40 p-4">
-            <h3 className="mb-2 font-medium text-white">Signals</h3>
-            <ul className="list-inside list-disc space-y-1 text-sm text-slate-300">
+          <Panel title="Signals">
+            <ul className="space-y-1.5 text-sm text-ink2">
               {stock.trend.signals.map((s) => (
-                <li key={s}>{s}</li>
+                <li key={s} className="flex items-start gap-2">
+                  <span className="text-accent">▸</span>
+                  {s}
+                </li>
               ))}
             </ul>
-          </div>
+          </Panel>
         </div>
       )}
 
       {tab === "ownership" && (
         <div className="space-y-4">
-          <div className="grid gap-4 sm:grid-cols-3">
-            <Metric label="Institutional Own" value={stock.inst_own} />
-            <Metric label="Insider Own" value={stock.insider_own} />
-            <Metric label="Short Float" value={stock.short_float} />
+          {stock.insider_signal && (
+            <InsiderSignalCard signal={stock.insider_signal} />
+          )}
+          <div className="grid grid-cols-3 gap-3">
+            <Metric label="Institutional own" value={stock.inst_own} />
+            <Metric label="Insider own" value={stock.insider_own} />
+            <Metric label="Short float" value={stock.short_float} />
           </div>
           {stock.insider_trades.length > 0 && (
-            <div className="overflow-x-auto rounded-xl border border-slate-800">
+            <div className="overflow-x-auto rounded-2xl border border-grid">
               <table className="w-full text-sm">
-                <thead className="bg-slate-900 text-slate-400">
+                <thead className="bg-panel text-left text-[11px] uppercase tracking-wider text-muted">
                   <tr>
-                    <th className="px-4 py-2 text-left">Insider</th>
-                    <th className="px-4 py-2 text-left">Transaction</th>
-                    <th className="px-4 py-2 text-left">Shares</th>
-                    <th className="px-4 py-2 text-left">Date</th>
+                    <th className="px-4 py-3">Insider</th>
+                    <th className="px-4 py-3">Transaction</th>
+                    <th className="px-4 py-3 text-right">Shares</th>
+                    <th className="px-4 py-3 text-right">Date</th>
                   </tr>
                 </thead>
                 <tbody>
                   {stock.insider_trades.map((t, i) => (
-                    <tr key={i} className="border-t border-slate-800">
-                      <td className="px-4 py-2">{t.insider}</td>
-                      <td className="px-4 py-2">{t.transaction}</td>
-                      <td className="px-4 py-2">{t.shares}</td>
-                      <td className="px-4 py-2">{t.date}</td>
+                    <tr key={i} className="border-t border-grid">
+                      <td className="px-4 py-2.5 text-ink2">{t.insider}</td>
+                      <td className="px-4 py-2.5 text-ink2">{t.transaction}</td>
+                      <td className="tnum px-4 py-2.5 text-right text-ink2">
+                        {t.shares}
+                      </td>
+                      <td className="tnum px-4 py-2.5 text-right text-muted">
+                        {t.date}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -203,36 +216,32 @@ export function StockDetail() {
 
       {tab === "news" && (
         <div className="space-y-4">
-          <div className="rounded-xl border border-slate-800 bg-slate-900/40 p-4">
-            <p className="text-sm text-slate-400">Overall sentiment</p>
-            <p className="text-lg font-medium capitalize text-white">
+          <Panel title="Overall sentiment">
+            <p className="text-lg font-semibold capitalize text-ink">
               {stock.sentiment.label}
             </p>
-            <p className="text-sm text-slate-500">
+            <p className="mt-1 text-sm text-muted">
               {stock.sentiment.positive_count} positive ·{" "}
               {stock.sentiment.neutral_count} neutral ·{" "}
               {stock.sentiment.negative_count} negative
             </p>
-          </div>
-          <div className="space-y-3">
+          </Panel>
+          <div className="space-y-2">
             {stock.sentiment.headlines.map((item, i) => (
-              <div
-                key={i}
-                className="rounded-xl border border-slate-800 bg-slate-900/40 p-4"
-              >
+              <div key={i} className="rounded-2xl border border-grid bg-panel p-4">
                 {item.url ? (
                   <a
                     href={item.url}
                     target="_blank"
                     rel="noreferrer"
-                    className="font-medium text-white hover:text-emerald-400"
+                    className="text-sm font-medium text-ink hover:text-accent"
                   >
                     {item.title}
                   </a>
                 ) : (
-                  <p className="font-medium text-white">{item.title}</p>
+                  <p className="text-sm font-medium text-ink">{item.title}</p>
                 )}
-                <div className="mt-2 flex gap-3 text-xs text-slate-500">
+                <div className="mt-1.5 flex gap-3 text-xs text-muted">
                   {item.date && <span>{item.date}</span>}
                   {item.sentiment && (
                     <span className="capitalize">{item.sentiment}</span>
@@ -242,40 +251,42 @@ export function StockDetail() {
             ))}
           </div>
           {stock.analyst_targets.length > 0 && (
-            <div className="rounded-xl border border-slate-800 p-4">
-              <h3 className="mb-3 font-medium text-white">Analyst Targets</h3>
-              <ul className="space-y-2 text-sm text-slate-300">
+            <Panel title="Analyst targets">
+              <ul className="space-y-1.5 text-sm text-ink2">
                 {stock.analyst_targets.map((t, i) => (
                   <li key={i}>
                     {t.analyst}:{" "}
                     {t.price_target != null
-                      ? formatMoney(t.price_target, stock.display_currency ?? currency)
+                      ? formatMoney(
+                          t.price_target,
+                          stock.display_currency ?? currency
+                        )
                       : "—"}{" "}
-                    ({t.date})
+                    <span className="text-muted">({t.date})</span>
                   </li>
                 ))}
               </ul>
-            </div>
+            </Panel>
           )}
         </div>
       )}
 
       {tab === "chart" && stock.chart_url && (
-        <div className="space-y-4 rounded-xl border border-slate-800 bg-slate-900/40 p-4">
+        <Panel title="Chart">
           {stock.data_source === "yahoo" ? (
-            <>
-              <p className="text-sm text-slate-400">
+            <div className="space-y-3">
+              <p className="text-sm text-muted">
                 Interactive chart hosted on Yahoo Finance.
               </p>
               <a
                 href={stock.chart_url}
                 target="_blank"
                 rel="noreferrer"
-                className="inline-flex rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-500"
+                className="inline-flex rounded-xl bg-accent px-4 py-2 text-sm font-medium text-white transition hover:bg-accent-soft"
               >
                 Open {stock.ticker} chart on Yahoo Finance
               </a>
-            </>
+            </div>
           ) : (
             <div className="overflow-hidden rounded-xl bg-white">
               <img
@@ -285,7 +296,7 @@ export function StockDetail() {
               />
             </div>
           )}
-        </div>
+        </Panel>
       )}
     </div>
   );
@@ -293,9 +304,11 @@ export function StockDetail() {
 
 function Metric({ label, value }: { label: string; value?: string | null }) {
   return (
-    <div className="rounded-xl border border-slate-800 bg-slate-900/40 p-4">
-      <p className="text-xs uppercase tracking-wide text-slate-500">{label}</p>
-      <p className="mt-1 font-mono text-lg text-white">{value ?? "—"}</p>
+    <div className="rounded-2xl border border-grid bg-panel px-4 py-3">
+      <p className="text-[11px] font-medium uppercase tracking-wider text-muted">
+        {label}
+      </p>
+      <p className="tnum mt-1 text-lg font-semibold text-ink">{value ?? "—"}</p>
     </div>
   );
 }

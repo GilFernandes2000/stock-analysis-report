@@ -25,6 +25,7 @@ class ScreenerResponse(BaseModel):
 
 class ReportSummary(BaseModel):
     id: int
+    kind: str = "market"
     report_type: str
     title: str
     created_at: datetime
@@ -34,6 +35,7 @@ class ReportSummary(BaseModel):
 
 class ReportDetail(BaseModel):
     id: int
+    kind: str = "market"
     report_type: str
     title: str
     content_json: dict[str, Any]

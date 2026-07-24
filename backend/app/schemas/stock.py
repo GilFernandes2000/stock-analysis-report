@@ -43,6 +43,23 @@ class InsiderTrade(BaseModel):
     date: str | None = None
 
 
+class InsiderSignal(BaseModel):
+    """Scored read on recent insider filings (open-market buys vs sales)."""
+
+    label: str  # Bullish | Neutral | Bearish | No activity
+    score: int
+    window_days: int
+    buy_count: int
+    sell_count: int
+    buyers: int
+    sellers: int
+    buy_value: float
+    sell_value: float
+    net_value: float
+    signals: list[str] = Field(default_factory=list)
+    summary: str = ""
+
+
 class StockAnalysisResponse(BaseModel):
     ticker: str
     company: str | None = None
@@ -83,6 +100,7 @@ class StockAnalysisResponse(BaseModel):
     analyst_targets: list[AnalystTarget] = Field(default_factory=list)
     analyst_upside_pct: float | None = None
     insider_trades: list[InsiderTrade] = Field(default_factory=list)
+    insider_signal: InsiderSignal | None = None
     raw: dict[str, Any] = Field(default_factory=dict)
     stale: bool = False
     disclaimer: str = (

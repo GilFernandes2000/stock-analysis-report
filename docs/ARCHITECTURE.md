@@ -2,6 +2,13 @@
 
 Flowcharts for the system overview, user journeys, and core data paths.
 
+> **Note (2026-07):** the app was redesigned around multi-user portfolio
+> management (auth, broker CSV imports, transaction-based analytics, tearsheet
+> reports). Diagrams below describe the research/report data paths that are still
+> current; the flat single-user portfolio flow was replaced — see the Key
+> components table at the bottom for the new module map.
+
+
 ## System overview
 
 ```mermaid
@@ -207,13 +214,15 @@ flowchart LR
 
 | Component | Location | Role |
 |-----------|----------|------|
-| React SPA | `frontend/src/` | User UI (search, screener, portfolio, reports) |
-| FastAPI routes | `backend/app/api/` | REST endpoints |
-| FinvizService | `backend/app/services/finviz_client.py` | Scrape Finviz + cache |
-| StockAnalysisService | `backend/app/services/stock_analysis.py` | Per-ticker analysis |
+| React SPA | `frontend/src/` | Auth, portfolio hub/detail, import wizard, reports, research |
+| Auth | `backend/app/services/auth.py`, `api/auth.py` | PBKDF2 passwords, DB session tokens, Bearer auth |
+| Portfolios API | `backend/app/api/portfolios.py` | CRUD, transactions, import, analytics endpoints |
+| ImportService | `backend/app/services/importers.py` | Degiro/Trading 212 CSV parsing, ISIN→ticker resolution, dedup |
+| Positions engine | `backend/app/services/positions.py` | Average-cost positions, realized P&L, cash flows (pure/testable) |
+| PortfolioAnalyticsService | `backend/app/services/portfolio_analytics.py` | Valuation, TWR, risk metrics, allocations (batched yfinance) |
+| TearsheetBuilder | `backend/app/services/tearsheet.py` | Professional portfolio reports with rule-based commentary |
+| ReportBuilder | `backend/app/services/report_builder.py` | Finviz screener market reports |
+| StockAnalysisService | `backend/app/services/stock_analysis.py` | Per-ticker research (trend, sentiment, targets) |
 | CurrencyService | `backend/app/services/currency_service.py` | Minor-unit fix + FX conversion |
-| YahooFinanceClient | `backend/app/services/yahoo_client.py` | European listings + normalized prices |
-| ReportBuilder | `backend/app/services/report_builder.py` | Screener-based reports |
-| PortfolioService | `backend/app/services/portfolio.py` | Holdings aggregation |
 | Static mount | `backend/app/static.py` | Serve `frontend/dist` on port 8000 |
-| Scheduler | `backend/app/scheduler/jobs.py` | Weekday report + portfolio jobs |
+| Scheduler | `backend/app/scheduler/jobs.py` | Weekday market-report job |
