@@ -208,6 +208,9 @@ class StockAnalysisService:
             )
             for t in insider_raw[:10]
         ]
+        from app.services.insider import analyze_insider_activity, parse_finviz_rows
+
+        insider_signal = analyze_insider_activity(parse_finviz_rows(insider_raw))
 
         return StockAnalysisResponse(
             ticker=normalize_ticker(requested),
@@ -249,6 +252,7 @@ class StockAnalysisService:
             analyst_targets=analyst_targets,
             analyst_upside_pct=upside,
             insider_trades=insider_trades,
+            insider_signal=insider_signal,
             raw=stock,
             stale=stale,
         )
@@ -256,7 +260,26 @@ class StockAnalysisService:
     def _analyze_yahoo(
         self, ticker: str, *, requested: str, display_currency: str
     ) -> StockAnalysisResponse:
+        from app.services.insider import (
+            analyze_insider_activity,
+            parse_finviz_rows,
+            yahoo_insider_rows,
+        )
+
         data = self.yahoo.fetch_analysis(ticker)
+        insider_rows = yahoo_insider_rows(self.db, ticker)
+        insider_signal = analyze_insider_activity(parse_finviz_rows(insider_rows))
+        insider_trades = [
+            InsiderTrade(
+                insider=r.get("Insider Trading"),
+                relationship=r.get("Relationship"),
+                transaction=r.get("Transaction"),
+                shares=r.get("#Shares"),
+                value=r.get("Value ($)"),
+                date=r.get("Date"),
+            )
+            for r in insider_rows[:10]
+        ]
         numeric = data["numeric"]
         sentiment_data = data["sentiment_data"]
         native_currency = data["currency"]
@@ -367,7 +390,8 @@ class StockAnalysisService:
             ),
             analyst_targets=analyst_targets,
             analyst_upside_pct=data["upside"],
-            insider_trades=[],
+            insider_trades=insider_trades,
+            insider_signal=insider_signal,
             raw=data["raw"],
             stale=False,
         )

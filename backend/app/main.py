@@ -6,10 +6,10 @@ from apscheduler.triggers.cron import CronTrigger
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import currency, portfolio, reports, screener, stocks
+from app.api import auth, currency, portfolios, reports, screener, stocks
 from app.config import settings
 from app.database import init_db
-from app.scheduler.jobs import refresh_portfolio_snapshot, run_scheduled_reports
+from app.scheduler.jobs import run_scheduled_reports
 from app.static import mount_frontend
 
 logger = logging.getLogger(__name__)
@@ -25,16 +25,6 @@ def _start_scheduler() -> None:
             minute=settings.report_cron_minute,
         ),
         id="daily_reports",
-        replace_existing=True,
-    )
-    scheduler.add_job(
-        refresh_portfolio_snapshot,
-        CronTrigger(
-            day_of_week="mon-fri",
-            hour=settings.portfolio_cron_hour,
-            minute=settings.portfolio_cron_minute,
-        ),
-        id="portfolio_refresh",
         replace_existing=True,
     )
     scheduler.start()
@@ -64,10 +54,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(auth.router, prefix="/api")
 app.include_router(stocks.router, prefix="/api")
 app.include_router(screener.router, prefix="/api")
 app.include_router(reports.router, prefix="/api")
-app.include_router(portfolio.router, prefix="/api")
+app.include_router(portfolios.router, prefix="/api")
 app.include_router(currency.router, prefix="/api")
 
 

@@ -25,6 +25,13 @@ def get_db() -> Generator[Session, None, None]:
 
 
 def init_db() -> None:
-    from app.models import ApiCache, Holding, Report  # noqa: F401
+    from app.models import (  # noqa: F401
+        ApiCache,
+        AuthSession,
+        Portfolio,
+        Report,
+        Transaction,
+        User,
+    )
 
     Base.metadata.create_all(bind=engine)

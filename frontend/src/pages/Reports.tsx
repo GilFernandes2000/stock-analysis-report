@@ -1,118 +1,221 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import { api } from "../api/client";
-import { LoadingSkeleton } from "../components/LoadingSkeleton";
-import { ReportViewer } from "../components/ReportViewer";
-import { StaleBadge } from "../components/StaleBadge";
+import {
+  Badge,
+  Button,
+  EmptyState,
+  ErrorNote,
+  LoadingSkeleton,
+  Panel,
+} from "../components/ui";
 import { usePageTitle } from "../hooks/usePageTitle";
-import type { ReportDetail, ReportSummary } from "../types";
+import type { PortfolioSummary, ReportSummary } from "../types";
 
 export function Reports() {
   usePageTitle("Reports");
-  const [summaries, setSummaries] = useState<ReportSummary[]>([]);
-  const [selected, setSelected] = useState<ReportDetail | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [generating, setGenerating] = useState(false);
+  const navigate = useNavigate();
+  const [reports, setReports] = useState<ReportSummary[] | null>(null);
+  const [portfolios, setPortfolios] = useState<PortfolioSummary[]>([]);
+  const [selected, setSelected] = useState<Set<number>>(new Set());
   const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [marketBusy, setMarketBusy] = useState(false);
 
-  useEffect(() => {
+  const load = useCallback(() => {
     api
       .listReports()
-      .then(setSummaries)
-      .catch((e) => setError(e.message))
-      .finally(() => setLoading(false));
+      .then(setReports)
+      .catch((e) => setError(e instanceof Error ? e.message : "Failed to load"));
+    api
+      .listPortfolios(false)
+      .then((list) => {
+        setPortfolios(list);
+        setSelected(new Set(list.filter((p) => p.transaction_count > 0).map((p) => p.id)));
+      })
+      .catch(() => undefined);
   }, []);
 
-  async function selectReport(id: number) {
+  useEffect(load, [load]);
+
+  function toggle(id: number) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  async function handleTearsheet() {
+    setBusy(true);
+    setError(null);
     try {
-      const report = await api.getReport(id);
-      setSelected(report);
+      const report = await api.generateTearsheet([...selected]);
+      navigate(`/reports/${report.id}`);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to load report");
+      setError(e instanceof Error ? e.message : "Report generation failed");
+    } finally {
+      setBusy(false);
     }
   }
 
-  async function handleGenerate() {
-    setGenerating(true);
+  async function handleMarketReports() {
+    setMarketBusy(true);
     setError(null);
     try {
       await api.generateReports();
-      const updated = await api.listReports();
-      setSummaries(updated);
-      if (updated[0]) await selectReport(updated[0].id);
+      load();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to generate reports");
+      setError(e instanceof Error ? e.message : "Generation failed");
     } finally {
-      setGenerating(false);
+      setMarketBusy(false);
     }
   }
 
-  if (loading) return <LoadingSkeleton rows={5} />;
+  async function handleDelete(id: number) {
+    if (!window.confirm("Delete this report?")) return;
+    await api.deleteReport(id);
+    load();
+  }
+
+  const tearsheets = (reports ?? []).filter((r) => r.kind === "portfolio");
+  const marketReports = (reports ?? []).filter((r) => r.kind !== "portfolio");
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold text-white">Reports</h1>
-          <p className="mt-2 text-slate-400">
-            Trend reports generated from Finviz screener presets.
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight text-ink">Reports</h1>
+        <p className="mt-1 text-sm text-muted">
+          Institutional-style tearsheets for your portfolios, plus scheduled market
+          screening reports.
+        </p>
+      </div>
+
+      {error && <ErrorNote message={error} />}
+
+      <Panel title="Generate portfolio tearsheet">
+        {portfolios.length === 0 ? (
+          <p className="text-sm text-muted">
+            Create a portfolio and import transactions first.
           </p>
-        </div>
-        <button
-          onClick={handleGenerate}
-          disabled={generating}
-          className="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-500 disabled:opacity-50"
-        >
-          {generating ? "Generating..." : "Generate all reports"}
-        </button>
-      </div>
-
-      {error && (
-        <div className="rounded-xl border border-red-500/40 bg-red-500/10 p-4 text-red-300">
-          {error}
-        </div>
-      )}
-
-      <div className="grid gap-6 lg:grid-cols-3">
-        <div className="space-y-2 lg:col-span-1">
-          {summaries.length === 0 ? (
-            <p className="text-slate-500">No reports yet.</p>
-          ) : (
-            summaries.map((s) => (
-              <button
-                key={s.id}
-                onClick={() => selectReport(s.id)}
-                className={`w-full rounded-xl border p-4 text-left transition ${
-                  selected?.id === s.id
-                    ? "border-emerald-500/50 bg-emerald-500/10"
-                    : "border-slate-800 bg-slate-900/40 hover:border-slate-600"
-                }`}
-              >
-                <p className="font-medium text-white">{s.title}</p>
-                <p className="mt-1 text-xs text-slate-500">
-                  {s.report_type} · {new Date(s.created_at).toLocaleString()}
-                </p>
-              </button>
-            ))
-          )}
-        </div>
-
-        <div className="lg:col-span-2">
-          {selected ? (
-            <div className="rounded-xl border border-slate-800 bg-slate-900/40 p-6">
-              {selected.content_json.stale && (
-                <div className="mb-4">
-                  <StaleBadge />
-                </div>
-              )}
-              <ReportViewer markdown={selected.content_markdown} />
+        ) : (
+          <div className="space-y-4">
+            <p className="text-sm text-ink2">
+              Select the portfolio(s) to cover. Multi-select produces one document
+              with a combined overview and a full section per portfolio.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {portfolios.map((p) => {
+                const empty = p.transaction_count === 0;
+                const active = selected.has(p.id);
+                return (
+                  <button
+                    key={p.id}
+                    disabled={empty}
+                    onClick={() => toggle(p.id)}
+                    className={`rounded-xl border px-4 py-2 text-sm font-medium transition disabled:opacity-40 ${
+                      active
+                        ? "border-accent bg-accent/10 text-accent"
+                        : "border-edge text-ink2 hover:border-accent/50"
+                    }`}
+                    title={empty ? "No transactions yet" : undefined}
+                  >
+                    {active ? "✓ " : ""}
+                    {p.name}
+                  </button>
+                );
+              })}
             </div>
-          ) : (
-            <div className="flex h-64 items-center justify-center rounded-xl border border-dashed border-slate-800 text-slate-500">
-              Select a report to view details
-            </div>
-          )}
+            <Button onClick={handleTearsheet} disabled={busy || selected.size === 0}>
+              {busy
+                ? "Building tearsheet… (fetching market data)"
+                : `Generate tearsheet (${selected.size})`}
+            </Button>
+          </div>
+        )}
+      </Panel>
+
+      <section className="space-y-3">
+        <h2 className="text-sm font-semibold uppercase tracking-wider text-ink">
+          Portfolio tearsheets
+        </h2>
+        {reports === null ? (
+          <LoadingSkeleton rows={2} />
+        ) : tearsheets.length === 0 ? (
+          <EmptyState
+            title="No tearsheets yet"
+            hint="Generate your first professional portfolio report above."
+          />
+        ) : (
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {tearsheets.map((r) => (
+              <ReportCard key={r.id} report={r} onDelete={() => handleDelete(r.id)} />
+            ))}
+          </div>
+        )}
+      </section>
+
+      <section className="space-y-3">
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-semibold uppercase tracking-wider text-ink">
+            Market reports
+          </h2>
+          <Button variant="ghost" onClick={handleMarketReports} disabled={marketBusy}>
+            {marketBusy ? "Generating… (slow)" : "Refresh market reports"}
+          </Button>
         </div>
-      </div>
+        {reports === null ? (
+          <LoadingSkeleton rows={2} />
+        ) : marketReports.length === 0 ? (
+          <EmptyState
+            title="No market reports yet"
+            hint="Market reports scan Finviz screener presets on weekday mornings, or on demand."
+          />
+        ) : (
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {marketReports.map((r) => (
+              <ReportCard key={r.id} report={r} onDelete={() => handleDelete(r.id)} />
+            ))}
+          </div>
+        )}
+      </section>
+    </div>
+  );
+}
+
+function ReportCard({
+  report,
+  onDelete,
+}: {
+  report: ReportSummary;
+  onDelete: () => void;
+}) {
+  return (
+    <div className="group relative rounded-2xl border border-grid bg-panel p-4 transition hover:border-accent/50">
+      <Link to={`/reports/${report.id}`} className="block">
+        <div className="flex items-start justify-between gap-2">
+          <Badge tone={report.kind === "portfolio" ? "accent" : "neutral"}>
+            {report.kind === "portfolio" ? "Tearsheet" : report.report_type}
+          </Badge>
+          <span className="text-[11px] text-muted">
+            {new Date(report.created_at).toLocaleDateString()}
+          </span>
+        </div>
+        <p className="mt-2 line-clamp-2 text-sm font-medium text-ink group-hover:text-accent">
+          {report.title}
+        </p>
+        <p className="mt-1 text-xs text-muted">
+          {new Date(report.created_at).toLocaleTimeString()}
+        </p>
+      </Link>
+      <button
+        onClick={onDelete}
+        className="absolute bottom-3 right-3 hidden rounded px-1.5 py-0.5 text-xs text-muted hover:text-down group-hover:block"
+        title="Delete report"
+      >
+        ✕
+      </button>
     </div>
   );
 }
