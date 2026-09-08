@@ -1,5 +1,6 @@
 import logging
 from collections.abc import Generator
+from pathlib import Path
 
 from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
@@ -7,6 +8,8 @@ from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 from app.config import settings
 
 logger = logging.getLogger(__name__)
+
+_ALEMBIC_INI = Path(__file__).resolve().parents[1] / "alembic.ini"
 
 engine = create_engine(
     settings.database_url,
@@ -79,3 +82,36 @@ def init_db() -> None:
 
     Base.metadata.create_all(bind=engine)
     _reconcile_columns()
+
+
+def _alembic_config():
+    from alembic.config import Config
+
+    cfg = Config(str(_ALEMBIC_INI))
+    cfg.set_main_option("sqlalchemy.url", settings.database_url)
+    return cfg
+
+
+def upgrade_database() -> None:
+    """Bring the database schema up to date (run on app startup).
+
+    - Fresh / empty database: ``alembic upgrade head`` builds everything.
+    - Database that predates Alembic (has tables, no ``alembic_version``):
+      adopt it with the legacy ``create_all`` + column reconcile, then stamp it
+      at ``head`` so future migrations apply normally.
+    - Already under Alembic: ``alembic upgrade head`` applies any new revisions.
+    """
+    from alembic import command
+
+    cfg = _alembic_config()
+    tables = set(inspect(engine).get_table_names())
+    try:
+        if tables and "alembic_version" not in tables:
+            logger.info("Adopting pre-Alembic database; stamping at head")
+            init_db()
+            command.stamp(cfg, "head")
+        else:
+            command.upgrade(cfg, "head")
+    except Exception:
+        logger.exception("Alembic migration failed; falling back to create_all")
+        init_db()

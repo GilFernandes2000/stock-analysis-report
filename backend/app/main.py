@@ -16,7 +16,7 @@ from app.api import (
     stocks,
 )
 from app.config import settings
-from app.database import init_db
+from app.database import upgrade_database
 from app.scheduler.jobs import run_scheduled_reports
 from app.static import mount_frontend
 
@@ -41,7 +41,7 @@ def _start_scheduler() -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    init_db()
+    upgrade_database()
     _start_scheduler()
     yield
     scheduler.shutdown(wait=False)

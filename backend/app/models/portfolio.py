@@ -4,6 +4,7 @@ from sqlalchemy import (
     DateTime,
     Float,
     ForeignKey,
+    Index,
     Integer,
     String,
     Text,
@@ -74,6 +75,8 @@ class Transaction(Base):
     __tablename__ = "transactions"
     __table_args__ = (
         UniqueConstraint("portfolio_id", "external_id", name="uq_txn_external"),
+        # Analytics loads a portfolio's transactions ordered by date.
+        Index("ix_txn_portfolio_date", "portfolio_id", "date"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)

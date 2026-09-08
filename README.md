@@ -95,6 +95,20 @@ CI (`.github/workflows/ci.yml`) runs the same checks on every push and PR.
 
 Frontend hot reload: `npm run dev` in `frontend/` (proxies `/api` to :8000).
 
+### Database schema
+
+Schema is managed with **Alembic** (`backend/migrations/`). The app runs
+`alembic upgrade head` on startup, so a fresh database is built automatically
+and an existing one is migrated; a database that predates Alembic is adopted
+and stamped on first boot. To change the schema:
+
+```bash
+cd backend && source .venv/bin/activate
+# edit models, then:
+alembic revision --autogenerate -m "what changed"
+alembic upgrade head            # applied automatically on next app start too
+```
+
 ## Docker
 
 ```bash
