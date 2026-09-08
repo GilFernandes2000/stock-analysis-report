@@ -268,6 +268,35 @@ def test_parse_trading212_semicolon_delimited():
     assert buy.fees == 0.5
 
 
+def test_flag_duplicates_matches_one_for_one(db_session):
+    from datetime import datetime
+
+    from app.models.portfolio import Portfolio, Transaction
+    from app.schemas.portfolio import ImportRow
+    from app.services.importers import ImportService
+
+    p = Portfolio(user_id=1, name="P", broker="degiro", base_currency="EUR")
+    db_session.add(p)
+    db_session.flush()
+    db_session.add(
+        Transaction(
+            portfolio_id=p.id, type="buy", date=datetime(2024, 1, 2),
+            ticker="AAPL", shares=1, price=100.0, amount=-100.0,
+        )
+    )
+    db_session.commit()
+
+    rows = [
+        ImportRow(type="buy", date=datetime(2024, 1, 2), ticker="AAPL",
+                  shares=1, price=100.0, amount=-100.0),
+        ImportRow(type="buy", date=datetime(2024, 1, 2), ticker="AAPL",
+                  shares=1, price=100.0, amount=-100.0),
+    ]
+    dupes = ImportService(db_session)._flag_duplicates(p, rows)
+    assert dupes == 1
+    assert [r.duplicate for r in rows] == [True, False]
+
+
 def test_isin_heuristic_suffixes():
     assert IsinResolver._heuristic("US0378331005", "AAPL", "USD") == "AAPL"
     assert IsinResolver._heuristic("DE0005190003", "BMW", "EUR") == "BMW.DE"

@@ -24,7 +24,7 @@ function toRow(q: Quote): TableRow {
 
 export function Favorites() {
   usePageTitle("Favorites");
-  const { tickers, add } = useFavorites();
+  const { tickers, add, error: favError } = useFavorites();
   const { currency } = useDisplayCurrency();
   const [quotes, setQuotes] = useState<Quote[] | null>(null);
   const [stale, setStale] = useState(false);
@@ -95,7 +95,7 @@ export function Favorites() {
         </form>
       </div>
 
-      {error && <ErrorNote message={error} />}
+      {(error || favError) && <ErrorNote message={error || favError!} />}
 
       {favCount > 0 && (
         <div className="flex items-center gap-3">

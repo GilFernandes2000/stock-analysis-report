@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import { BrowserRouter, Route, Routes } from "react-router-dom";
 import { App } from "./App";
 import { AuthProvider } from "./auth/AuthContext";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 import { FavoritesProvider } from "./favorites/FavoritesContext";
 import { Login } from "./pages/Login";
 import "./index.css";
@@ -32,21 +33,23 @@ createRoot(document.getElementById("root")!).render(
     <BrowserRouter>
       <AuthProvider>
         <FavoritesProvider>
-          <Suspense fallback={<RouteFallback />}>
-            <Routes>
-              <Route path="/login" element={<Login />} />
-              <Route element={<App />}>
-                <Route index element={<Portfolios />} />
-                <Route path="portfolios/:id" element={<PortfolioDetail />} />
-                <Route path="reports" element={<Reports />} />
-                <Route path="reports/:id" element={<ReportView />} />
-                <Route path="market" element={<Market />} />
-                <Route path="screener" element={<Screener />} />
-                <Route path="favorites" element={<Favorites />} />
-                <Route path="stock/:ticker" element={<StockDetail />} />
-              </Route>
-            </Routes>
-          </Suspense>
+          <ErrorBoundary>
+            <Suspense fallback={<RouteFallback />}>
+              <Routes>
+                <Route path="/login" element={<Login />} />
+                <Route element={<App />}>
+                  <Route index element={<Portfolios />} />
+                  <Route path="portfolios/:id" element={<PortfolioDetail />} />
+                  <Route path="reports" element={<Reports />} />
+                  <Route path="reports/:id" element={<ReportView />} />
+                  <Route path="market" element={<Market />} />
+                  <Route path="screener" element={<Screener />} />
+                  <Route path="favorites" element={<Favorites />} />
+                  <Route path="stock/:ticker" element={<StockDetail />} />
+                </Route>
+              </Routes>
+            </Suspense>
+          </ErrorBoundary>
         </FavoritesProvider>
       </AuthProvider>
     </BrowserRouter>

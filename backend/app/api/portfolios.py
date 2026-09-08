@@ -25,6 +25,10 @@ from app.utils.time import utcnow
 
 router = APIRouter(prefix="/portfolios", tags=["portfolios"])
 
+# Broker CSV exports are well under this; the cap guards against a memory-DoS
+# upload. A year of very active trading is a few hundred KB.
+MAX_IMPORT_BYTES = 10_000_000
+
 
 def _get_portfolio(db: Session, user: User, portfolio_id: int) -> Portfolio:
     portfolio = (
@@ -196,7 +200,12 @@ async def import_preview(
     db: Session = Depends(get_db),
 ):
     portfolio = _get_portfolio(db, user, portfolio_id)
-    content = await file.read()
+    content = await file.read(MAX_IMPORT_BYTES + 1)
+    if len(content) > MAX_IMPORT_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail=f"File too large (limit {MAX_IMPORT_BYTES // 1_000_000} MB).",
+        )
     return ImportService(db).preview(portfolio, content, file.filename or "upload.csv")
 
 

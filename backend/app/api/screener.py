@@ -1,9 +1,12 @@
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.config import MOVER_PRESETS, SCREENER_PRESETS
 from app.database import get_db
 from app.schemas.report import ScreenerResponse, ScreenerStockRow
+from app.services.auth import get_current_user
 from app.services.finviz_client import (
     FinvizService,
     parse_float,
@@ -11,7 +14,11 @@ from app.services.finviz_client import (
     parse_percent,
 )
 
-router = APIRouter(prefix="/screener", tags=["screener"])
+logger = logging.getLogger(__name__)
+
+router = APIRouter(
+    prefix="/screener", tags=["screener"], dependencies=[Depends(get_current_user)]
+)
 
 _KNOWN_KEYS = {
     "No.",
@@ -77,7 +84,10 @@ def run_screener(preset: str, db: Session = Depends(get_db)):
     try:
         rows, stale = service.run_screener(preset)
     except Exception as exc:
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
+        logger.warning("Screener '%s' failed: %s", preset, exc)
+        raise HTTPException(
+            status_code=502, detail="The screener data source is unavailable right now."
+        ) from exc
 
     stocks = [_build_row(row) for row in rows if row.get("Ticker")]
     return ScreenerResponse(

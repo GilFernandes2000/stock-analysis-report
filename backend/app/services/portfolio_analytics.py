@@ -9,7 +9,6 @@ from __future__ import annotations
 import json
 import logging
 import math
-from concurrent.futures import ThreadPoolExecutor
 from datetime import timedelta
 
 import pandas as pd
@@ -44,6 +43,7 @@ from app.services.market_math import (
     suffix_currency,
 )
 from app.services.positions import compute_positions
+from app.services.thread_pool import shared_pool
 from app.utils.time import utcnow
 
 logger = logging.getLogger(__name__)
@@ -101,11 +101,9 @@ class TickerProfileCache:
                 stale_or_missing.append(ticker)
 
         if stale_or_missing:
-            workers = min(8, len(stale_or_missing))
-            with ThreadPoolExecutor(max_workers=workers) as pool:
-                fetched = dict(
-                    zip(stale_or_missing, pool.map(self._fetch, stale_or_missing))
-                )
+            fetched = dict(
+                zip(stale_or_missing, shared_pool().map(self._fetch, stale_or_missing))
+            )
             now = utcnow()
             for ticker, profile in fetched.items():
                 payload = json.dumps(profile)

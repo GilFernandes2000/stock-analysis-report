@@ -43,6 +43,18 @@ def test_upgrade_database_on_empty_db(sqlite_db):
     assert EXPECTED_TABLES <= set(inspect(sqlite_db).get_table_names())
 
 
+def test_upgrade_database_falls_back_to_create_all_on_failure(sqlite_db, monkeypatch):
+    def boom(*a, **k):
+        raise RuntimeError("alembic exploded")
+
+    monkeypatch.setattr("alembic.command.upgrade", boom)
+    monkeypatch.setattr("alembic.command.stamp", boom)
+
+    db.upgrade_database()  # must not raise
+
+    assert EXPECTED_TABLES <= set(inspect(sqlite_db).get_table_names())
+
+
 def test_upgrade_database_adopts_pre_alembic_db(sqlite_db):
     # A database created the old way: real tables, no alembic_version, and
     # (simulating an older schema) no favorites table.
