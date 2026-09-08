@@ -33,6 +33,25 @@ Dividend (Ordinary),2024-05-10 12:00:00,US0378331005,AAPL,Apple Inc,5.0000000,0.
 Interest on cash,2024-07-01 00:00:00,,,,,,,,,,0.42,EUR,,,,,,int-1
 """
 
+# Real-world export (Jan 2025): date column is "Time (UTC)" with a +00:00
+# offset, Notes/ID sit before "No. of shares", fee column is "Currency
+# conversion fee". This exact shape previously imported as zero rows.
+T212_UTC_HEADER = (
+    "Action,Time (UTC),ISIN,Ticker,Name,Notes,ID,No. of shares,Price / share,"
+    "Currency (Price / share),Exchange rate,Result,Currency (Result),Total,"
+    "Currency (Total),Withholding tax,Currency (Withholding tax),"
+    "Currency conversion fee,Currency (Currency conversion fee),"
+    "French transaction tax,Currency (French transaction tax)\n"
+    "Deposit,2025-01-29 17:37:08+00:00,,,,Transaction ID: LX39,dep-1,,,,,,,100,EUR,,,,,,\n"
+    "Deposit,2025-01-29 17:37:09+00:00,,,,Free Shares Promotion,dep-2,,,,,,,8.94,EUR,,,,,,\n"
+    "Market buy,2025-02-03 14:30:02+00:00,US0378331005,AAPL,Apple Inc,,buy-1,"
+    "5.0000000,180.00,USD,1.0900,,,826.19,EUR,,,0.50,EUR,,\n"
+    "Market sell,2025-06-05 15:00:00+00:00,US0378331005,AAPL,Apple Inc,,sell-1,"
+    "2.0000000,200.00,USD,1.0800,29.63,EUR,369.80,EUR,,,0.50,EUR,,\n"
+    "Dividend (Ordinary),2025-05-10 12:00:00+00:00,US0378331005,AAPL,Apple Inc,,"
+    "div-1,5.0000000,0.24,USD,,,,1.10,EUR,0.18,USD,,,,\n"
+)
+
 
 def test_parse_number_locales():
     assert _parse_number("1,234.56") == 1234.56
@@ -172,6 +191,39 @@ def test_parse_trading212():
 
     deposit = by_type["deposit"]
     assert deposit.amount == 1000.0
+
+
+def test_parse_trading212_time_utc_header():
+    # Regression: "Time (UTC)" + a +00:00 offset used to skip every row silently.
+    assert detect_format(T212_UTC_HEADER) == ("trading212", "history")
+    rows, warnings = parse_trading212(T212_UTC_HEADER, "EUR")
+    by_type = {}
+    for r in rows:
+        by_type.setdefault(r.type, []).append(r)
+
+    assert [round(d.amount, 2) for d in by_type["deposit"]] == [100.0, 8.94]
+    buy = by_type["buy"][0]
+    assert buy.ticker == "AAPL" and buy.shares == 5
+    assert abs(buy.amount + 825.69) < 1e-6 and buy.fees == 0.5
+    assert buy.date == datetime(2025, 2, 3, 14, 30, 2)
+    assert by_type["sell"][0].shares == 2
+    assert abs(by_type["dividend"][0].amount - 1.10) < 1e-6
+    assert warnings == []
+
+
+def test_parse_trading212_number_of_shares_variant():
+    text = T212_UTC_HEADER.replace("No. of shares", "Number of shares")
+    assert detect_format(text) == ("trading212", "history")
+    rows, _ = parse_trading212(text, "EUR")
+    assert next(r for r in rows if r.type == "buy").shares == 5
+
+
+def test_parse_trading212_unreadable_date_warns_instead_of_silent_zero():
+    text = T212_UTC_HEADER.replace("2025-02-03 14:30:02+00:00", "03.02.2025")
+    rows, warnings = parse_trading212(text, "EUR")
+    # the deposits/sell/dividend still parse; only the mangled row is dropped
+    assert any(r.type == "buy" for r in rows) is False
+    assert any("03.02.2025" in w for w in warnings)
 
 
 def test_money_pair_handles_both_column_orderings():

@@ -88,6 +88,9 @@ def test_analyze_computes_valuation_and_performance(db_session, portfolio, fake_
     assert pos.ticker == "AAPL"
     assert pos.sector == "Technology"
     assert pos.weight_pct == 100.0
+    # Native entry price from Transaction.price (100 USD), not the €-avg cost.
+    assert pos.native_avg_cost == pytest.approx(100.0)
+    assert pos.native_avg_cost_currency == "USD"
 
     # Performance series covers the trading days and tracks price moves
     assert result.performance, "expected a performance series"

@@ -295,6 +295,9 @@ class PortfolioAnalyticsService:
                     prev_value += value
             profile = profiles.get(pos.ticker) or {}
             unrealized = value - pos.cost_basis if value is not None else None
+            native_entry = pos.native_avg_cost
+            if native_entry is not None:
+                native_entry = round(native_entry / minor_divisor(pos.native_currency), 4)
             position_rows.append(
                 PositionResponse(
                     ticker=pos.ticker,
@@ -302,6 +305,10 @@ class PortfolioAnalyticsService:
                     isin=pos.isin,
                     shares=round(pos.shares, 6),
                     avg_cost=round(pos.avg_cost, 4),
+                    native_avg_cost=native_entry,
+                    native_avg_cost_currency=major_currency(pos.native_currency)
+                    if pos.native_currency
+                    else None,
                     cost_basis=round(pos.cost_basis, 2),
                     current_price=round(price_base, 4) if price_base is not None else None,
                     native_price=round(native_price, 4) if native_price is not None else None,
