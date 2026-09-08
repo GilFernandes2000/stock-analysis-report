@@ -1,8 +1,8 @@
 import json
 import re
 import time
-from datetime import timedelta
 from collections.abc import Callable
+from datetime import timedelta
 from typing import Any
 
 import finviz

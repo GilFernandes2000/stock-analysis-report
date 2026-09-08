@@ -1,4 +1,3 @@
-import pytest
 
 from app.services.analysis import compute_technical_trend
 

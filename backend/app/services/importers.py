@@ -18,7 +18,6 @@ import yfinance as yf
 from sqlalchemy.orm import Session
 
 from app.models.cache import ApiCache
-from app.utils.time import utcnow
 from app.models.portfolio import (
     TRANSACTION_TYPES,
     TXN_BUY,
@@ -38,6 +37,7 @@ from app.schemas.portfolio import (
     ImportPreviewResponse,
     ImportRow,
 )
+from app.utils.time import utcnow
 
 logger = logging.getLogger(__name__)
 

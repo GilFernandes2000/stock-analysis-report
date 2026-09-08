@@ -60,7 +60,7 @@ def fx_pairs(currencies: Iterable[str | None], base: str) -> list[str]:
 
 
 def extract_closes(
-    data: "pd.DataFrame | None", symbols: list[str]
+    data: pd.DataFrame | None, symbols: list[str]
 ) -> dict[str, pd.Series]:
     """Pull a tz-naive, date-normalized Close series per symbol from a
     ``yfinance.download`` result (single- or multi-symbol shape)."""

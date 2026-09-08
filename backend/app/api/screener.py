@@ -7,8 +7,8 @@ from app.schemas.report import ScreenerResponse, ScreenerStockRow
 from app.services.finviz_client import (
     FinvizService,
     parse_float,
-    parse_percent,
     parse_market_cap,
+    parse_percent,
 )
 
 router = APIRouter(prefix="/screener", tags=["screener"])

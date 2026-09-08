@@ -1,4 +1,9 @@
-from app.services.finviz_client import _fix_screener_row
+from app.services.finviz_client import (
+    _fix_screener_row,
+    parse_float,
+    parse_market_cap,
+    parse_percent,
+)
 
 
 def test_realigns_row_when_logo_column_present():
@@ -78,3 +83,23 @@ def test_single_letter_ticker_with_logo_is_realigned():
 def test_missing_ticker_key_is_safe():
     row = {"No.": "1", "Foo": "bar"}
     assert _fix_screener_row(row) == row
+
+
+def test_parse_market_cap_suffixes():
+    assert parse_market_cap("1.23B") == 1_230_000_000.0
+    assert parse_market_cap("456.7M") == 456_700_000.0
+    assert parse_market_cap("2.1T") == 2_100_000_000_000.0
+    assert parse_market_cap("980K") == 980_000.0
+    assert parse_market_cap("1,234.5B") == 1_234_500_000_000.0
+    assert parse_market_cap("-") is None
+    assert parse_market_cap("") is None
+    assert parse_market_cap(None) is None
+
+
+def test_parse_float_and_percent():
+    assert parse_float("1,234.56") == 1234.56
+    assert parse_percent("75.00%") == 75.0
+    assert parse_float("-") is None
+    assert parse_float("") is None
+    assert parse_float("N/A") is None
+    assert parse_float(12.5) == 12.5

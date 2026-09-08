@@ -87,9 +87,11 @@ duplicates are detected and skipped.
 ## Development
 
 ```bash
-cd backend && source .venv/bin/activate && pytest   # 35 tests
+cd backend && source .venv/bin/activate && ruff check . && pytest
 cd frontend && npm run build                         # type-check + build
 ```
+
+CI (`.github/workflows/ci.yml`) runs the same checks on every push and PR.
 
 Frontend hot reload: `npm run dev` in `frontend/` (proxies `/api` to :8000).
 

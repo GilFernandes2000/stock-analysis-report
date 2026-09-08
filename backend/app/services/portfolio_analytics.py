@@ -42,7 +42,7 @@ from app.services.market_math import (
     minor_divisor,
     suffix_currency,
 )
-from app.services.positions import CashFlows, PositionState, compute_positions
+from app.services.positions import compute_positions
 from app.utils.time import utcnow
 
 logger = logging.getLogger(__name__)
@@ -298,9 +298,6 @@ class PortfolioAnalyticsService:
             row = next((r for r in position_rows if r.ticker == pos.ticker), None)
             unrealized = row.unrealized_pnl if row and row.unrealized_pnl is not None else 0.0
             total = unrealized + pos.realized_pnl + pos.dividends - pos.fees
-            invested = pos.cost_basis + (
-                abs(pos.realized_pnl) if not pos.is_open else 0.0
-            )
             denom = pos.cost_basis if pos.is_open else None
             contributions.append(
                 ContributorEntry(
