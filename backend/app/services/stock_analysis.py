@@ -331,7 +331,6 @@ class StockAnalysisService:
 
         high = data["high_52w"]
         low = data["low_52w"]
-        native_price = money["native_price"]
         display_price = money["display_price"]
 
         high_display = (

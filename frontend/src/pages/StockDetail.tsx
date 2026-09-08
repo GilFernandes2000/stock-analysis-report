@@ -10,6 +10,7 @@ import {
   StaleBadge,
   TrendBadge,
 } from "../components/ui";
+import { useFavorites } from "../favorites/FavoritesContext";
 import { useDisplayCurrency } from "../hooks/useDisplayCurrency";
 import { usePageTitle } from "../hooks/usePageTitle";
 import type { StockAnalysis } from "../types";
@@ -78,6 +79,7 @@ export function StockDetail() {
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
+            <FavoriteToggle ticker={stock.ticker} />
             <TrendBadge label={stock.trend.label} />
             {stock.insider_signal &&
               stock.insider_signal.label !== "No activity" && (
@@ -316,4 +318,23 @@ function Metric({ label, value }: { label: string; value?: string | null }) {
 function formatPct(value?: number | null) {
   if (value == null) return undefined;
   return `${value > 0 ? "+" : ""}${value.toFixed(2)}%`;
+}
+
+function FavoriteToggle({ ticker }: { ticker: string }) {
+  const { isFavorite, toggle } = useFavorites();
+  const active = isFavorite(ticker);
+  return (
+    <button
+      onClick={() => toggle(ticker)}
+      className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-0.5 text-xs font-medium transition ${
+        active
+          ? "border-warn/40 bg-warn/10 text-warn"
+          : "border-edge text-ink2 hover:border-warn/40 hover:text-warn"
+      }`}
+      title={active ? "Remove from favorites" : "Add to favorites"}
+    >
+      <span className="text-sm leading-none">{active ? "★" : "☆"}</span>
+      {active ? "Following" : "Follow"}
+    </button>
+  );
 }

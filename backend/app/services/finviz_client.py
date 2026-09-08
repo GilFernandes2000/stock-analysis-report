@@ -1,18 +1,53 @@
 import json
+import re
 import time
-from datetime import datetime, timedelta
 from collections.abc import Callable
+from datetime import timedelta
 from typing import Any
 
 import finviz
 from finviz.screener import Screener
 from sqlalchemy.orm import Session
 
-from app.config import SCREENER_PRESETS, settings
+from app.config import ALL_SCREENS, settings
 from app.models.cache import ApiCache
+from app.utils.time import utcnow
+
+_TICKER_RE = re.compile(r"^[A-Z][A-Z0-9.\-]{0,6}$")
 
 
-def _parse_float(value: str | float | int | None) -> float | None:
+def _fix_screener_row(row: dict[str, str]) -> dict[str, str]:
+    """Realign a Finviz screener row when a ticker-logo column is present.
+
+    Finviz injects a logo cell (a single letter matching the real ticker's
+    first character) ahead of the ticker. The pinned ``finviz`` library uses a
+    hardcoded header list that doesn't include it, so every value ends up one
+    column to the right of its label (ticker "ZTS" lands under "Perf Week",
+    price under "Change", etc.). Detect that injected cell and shift the values
+    back into alignment. Self-guarding: only shifts when the logo pattern is
+    unambiguously present, so it's a no-op if Finviz drops the column again.
+    """
+    keys = list(row.keys())
+    values = list(row.values())
+    if "Ticker" not in keys:
+        return row
+    ti = keys.index("Ticker")
+    if ti + 1 >= len(values):
+        return row
+    logo, nxt = values[ti], values[ti + 1]
+    if (
+        len(logo) == 1
+        and logo.isalpha()
+        and logo.isupper()
+        and _TICKER_RE.match(nxt or "")
+        and nxt[0] == logo
+    ):
+        realigned = values[:ti] + values[ti + 1 :]
+        return dict(zip(keys, realigned))
+    return row
+
+
+def parse_float(value: str | float | int | None) -> float | None:
     if value is None:
         return None
     if isinstance(value, (int, float)):
@@ -26,8 +61,23 @@ def _parse_float(value: str | float | int | None) -> float | None:
         return None
 
 
-def _parse_percent(value: str | float | int | None) -> float | None:
-    return _parse_float(value)
+def parse_percent(value: str | float | int | None) -> float | None:
+    return parse_float(value)
+
+
+def parse_market_cap(value: str | None) -> float | None:
+    """Finviz market cap like '1.23B', '456.7M', '2.1T' -> absolute float."""
+    if not value or value in ("-", "--"):
+        return None
+    text = str(value).strip().upper().replace(",", "")
+    mult = 1.0
+    if text and text[-1] in ("K", "M", "B", "T"):
+        mult = {"K": 1e3, "M": 1e6, "B": 1e9, "T": 1e12}[text[-1]]
+        text = text[:-1]
+    try:
+        return float(text) * mult
+    except ValueError:
+        return None
 
 
 class FinvizService:
@@ -38,7 +88,7 @@ class FinvizService:
         row = self.db.query(ApiCache).filter(ApiCache.cache_key == key).first()
         if not row:
             return None
-        age = datetime.utcnow() - row.created_at
+        age = utcnow() - row.created_at
         payload = json.loads(row.payload)
         is_fresh = age <= timedelta(seconds=settings.cache_ttl_seconds)
         return payload, is_fresh
@@ -48,7 +98,7 @@ class FinvizService:
         row = self.db.query(ApiCache).filter(ApiCache.cache_key == key).first()
         if row:
             row.payload = serialized
-            row.created_at = datetime.utcnow()
+            row.created_at = utcnow()
         else:
             row = ApiCache(cache_key=key, payload=serialized)
             self.db.add(row)
@@ -116,10 +166,10 @@ class FinvizService:
         )
 
     def run_screener(self, preset: str) -> tuple[list[dict[str, str]], bool]:
-        if preset not in SCREENER_PRESETS:
+        if preset not in ALL_SCREENS:
             raise ValueError(f"Unknown screener preset: {preset}")
 
-        config = SCREENER_PRESETS[preset]
+        config = ALL_SCREENS[preset]
         key = f"screener:{preset}"
 
         def fetch() -> list[dict[str, str]]:
@@ -133,7 +183,7 @@ class FinvizService:
             for i, stock in enumerate(stock_list):
                 if i >= limit:
                     break
-                results.append(dict(stock))
+                results.append(_fix_screener_row(dict(stock)))
                 if i > 0 and i % 20 == 0:
                     time.sleep(settings.finviz_request_delay)
             return results
@@ -143,16 +193,16 @@ class FinvizService:
     @staticmethod
     def extract_numeric_fields(stock: dict[str, Any]) -> dict[str, float | None]:
         return {
-            "price": _parse_float(stock.get("Price")),
-            "rsi": _parse_float(stock.get("RSI (14)")),
-            "sma20": _parse_percent(stock.get("SMA20")),
-            "sma50": _parse_percent(stock.get("SMA50")),
-            "sma200": _parse_percent(stock.get("SMA200")),
-            "beta": _parse_float(stock.get("Beta")),
-            "perf_week": _parse_percent(stock.get("Perf Week")),
-            "perf_month": _parse_percent(stock.get("Perf Month")),
-            "perf_quarter": _parse_percent(stock.get("Perf Quarter")),
-            "perf_ytd": _parse_percent(stock.get("Perf YTD")),
+            "price": parse_float(stock.get("Price")),
+            "rsi": parse_float(stock.get("RSI (14)")),
+            "sma20": parse_percent(stock.get("SMA20")),
+            "sma50": parse_percent(stock.get("SMA50")),
+            "sma200": parse_percent(stock.get("SMA200")),
+            "beta": parse_float(stock.get("Beta")),
+            "perf_week": parse_percent(stock.get("Perf Week")),
+            "perf_month": parse_percent(stock.get("Perf Month")),
+            "perf_quarter": parse_percent(stock.get("Perf Quarter")),
+            "perf_ytd": parse_percent(stock.get("Perf YTD")),
         }
 
     @staticmethod
@@ -161,7 +211,7 @@ class FinvizService:
         for target in targets:
             for field in ("target_to", "target_from", "Target"):
                 val = target.get(field)
-                parsed = _parse_float(val)
+                parsed = parse_float(val)
                 if parsed is not None:
                     values.append(parsed)
                     break

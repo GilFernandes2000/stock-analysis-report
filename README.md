@@ -87,11 +87,27 @@ duplicates are detected and skipped.
 ## Development
 
 ```bash
-cd backend && source .venv/bin/activate && pytest   # 35 tests
+cd backend && source .venv/bin/activate && ruff check . && pytest
 cd frontend && npm run build                         # type-check + build
 ```
 
+CI (`.github/workflows/ci.yml`) runs the same checks on every push and PR.
+
 Frontend hot reload: `npm run dev` in `frontend/` (proxies `/api` to :8000).
+
+### Database schema
+
+Schema is managed with **Alembic** (`backend/migrations/`). The app runs
+`alembic upgrade head` on startup, so a fresh database is built automatically
+and an existing one is migrated; a database that predates Alembic is adopted
+and stamped on first boot. To change the schema:
+
+```bash
+cd backend && source .venv/bin/activate
+# edit models, then:
+alembic revision --autogenerate -m "what changed"
+alembic upgrade head            # applied automatically on next app start too
+```
 
 ## Docker
 
@@ -105,8 +121,10 @@ docker compose up --build
   (`yfinance`); quotes are delayed. **Not intended for live trading; not
   investment advice.**
 - SQLite storage (`backend/stock_analysis.db`); auth is designed for a trusted
-  local/home-server deployment (no rate limiting, plain HTTP unless you put it
-  behind TLS).
+  local/home-server deployment. Login has a best-effort in-process rate limit
+  (10 failures per username+IP per 15 min); it runs plain HTTP unless you put it
+  behind TLS, and the rate-limit state is per-process (resets on restart, not
+  shared across workers).
 - An ISIN listed on several exchanges resolves to the listing matching the trade
   currency when Yahoo offers one; otherwise valuation uses the instrument's real
   quote currency with FX conversion (e.g. VUSA bought in EUR still values

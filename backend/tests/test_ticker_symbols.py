@@ -1,6 +1,10 @@
-import pytest
 
-from app.services.technical_indicators import compute_rsi, performance_pct, price_vs_sma_pct, sma
+from app.services.technical_indicators import (
+    compute_rsi,
+    performance_pct,
+    price_vs_sma_pct,
+    sma,
+)
 from app.services.ticker_symbols import (
     has_exchange_suffix,
     is_likely_european,

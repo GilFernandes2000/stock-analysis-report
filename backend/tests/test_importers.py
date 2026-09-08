@@ -2,7 +2,9 @@ from datetime import datetime
 
 from app.services.importers import (
     IsinResolver,
+    _money_pair,
     _parse_number,
+    _sniff_delimiter,
     detect_format,
     parse_degiro_account,
     parse_degiro_transactions,
@@ -46,6 +48,64 @@ def test_detect_format():
     assert detect_format(DEGIRO_ACCOUNT) == ("degiro", "account")
     assert detect_format(T212_HISTORY) == ("trading212", "history")
     assert detect_format("foo,bar\n1,2\n") is None
+
+
+def test_detect_and_parse_semicolon_and_tab_delimited():
+    # Degiro exports with commas in some regions and semicolons in others
+    # (comma is the EU decimal separator); pasted files may be tab-separated.
+    semi = (
+        "Date;Time;Value date;Product;ISIN;Description;FX;Change;;Balance;;Order Id\n"
+        "01-04-2024;08:10;01-04-2024;APPLE INC;US0378331005;Dividend;;2,88;EUR;2500,00;EUR;\n"
+    )
+    assert detect_format(semi) == ("degiro", "account")
+    rows, _ = parse_degiro_account(semi, "EUR")
+    assert len(rows) == 1
+    assert rows[0].type == "dividend"
+    assert abs(rows[0].amount - 2.88) < 1e-6
+
+    tab = (
+        "Date\tTime\tProduct\tISIN\tExchange\tVenue\tQuantity\tPrice\t\tLocal value"
+        "\t\tValue\t\tExchange rate\tTransaction and/or third party fees\t\tTotal\t\tOrder ID\n"
+        "02-01-2024\t09:30\tAPPLE INC\tUS0378331005\tNDQ\tXNAS\t10\t150,00\tUSD"
+        "\t-1500,00\tUSD\t-1380,00\tEUR\t1,0870\t-2,00\tEUR\t-1382,00\tEUR\tord-1\n"
+    )
+    assert detect_format(tab) == ("degiro", "transactions")
+    trows, _ = parse_degiro_transactions(tab, "EUR")
+    assert len(trows) == 1
+    assert trows[0].type == "buy"
+    assert trows[0].shares == 10
+    assert abs(trows[0].amount + 1380.0) < 1e-6
+    assert abs(trows[0].fees - 2.0) < 1e-6
+
+
+def test_parse_flatexdegiro_account_currency_first():
+    # flatexDEGIRO variant: the "Change"/"Balance" columns hold the CURRENCY and
+    # the amount sits in the following unnamed column (reverse of classic).
+    text = (
+        "Date,Time,Value date,Product,ISIN,Description,FX,Change,,Balance,,Order Id\n"
+        '05-07-2026,11:10,30-06-2026,,,Flatex Interest Income,,EUR,"0,00",EUR,"117,60",\n'
+        '02-07-2026,11:04,30-06-2026,,,Connectivity Fee DEGIRO 2026,,EUR,"-0,02",EUR,"117,60",\n'
+        '01-04-2026,08:10,01-04-2026,APPLE INC,US0378331005,Dividend,,EUR,"12,50",EUR,"130,10",\n'
+    )
+    assert detect_format(text) == ("degiro", "account")
+    rows, _ = parse_degiro_account(text, "EUR")
+    by_type = {r.type: r for r in rows}
+    # zero-amount interest is skipped; fee and dividend are captured
+    assert "fee" in by_type and abs(by_type["fee"].amount + 0.02) < 1e-6
+    assert "dividend" in by_type
+    assert abs(by_type["dividend"].amount - 12.50) < 1e-6
+    assert by_type["dividend"].isin == "US0378331005"
+
+
+def test_detect_account_across_locales():
+    # Degiro account statements are identified by the running Balance/Saldo
+    # column, which is stable across export languages.
+    en = "Date,Time,Value date,Product,ISIN,Description,FX,Change,,Balance,,Order Id\n"
+    nl = "Datum,Tijd,Valutadatum,Product,ISIN,Omschrijving,FX,Mutatie,,Saldo,,Order Id\n"
+    pt = "Data,Hora,Data Valor,Produto,ISIN,Descrição,Câmbio,,Variação,,Saldo,,ID da Ordem\n"
+    es = "Fecha,Hora,Fecha valor,Producto,ISIN,Descripción,,Variación,,Saldo,,ID de la orden\n"
+    for text in (en, nl, pt, es):
+        assert detect_format(text) == ("degiro", "account")
 
 
 def test_parse_degiro_transactions():
@@ -112,6 +172,48 @@ def test_parse_trading212():
 
     deposit = by_type["deposit"]
     assert deposit.amount == 1000.0
+
+
+def test_money_pair_handles_both_column_orderings():
+    # classic Degiro: amount then currency
+    assert _money_pair(["x", "-1380,00", "EUR", "y"], 1) == (-1380.0, "EUR")
+    # flatexDEGIRO: currency then amount
+    assert _money_pair(["x", "EUR", "-1380,00", "y"], 1) == (-1380.0, "EUR")
+    # amount with no currency cell
+    assert _money_pair(["x", "42,50", "", "y"], 1) == (42.5, None)
+    # zero amount is a real value, not "missing"
+    assert _money_pair(['x', '0,00', 'EUR'], 1) == (0.0, "EUR")
+    # nothing usable
+    assert _money_pair(["x", "", ""], 1) == (None, None)
+    # no column
+    assert _money_pair(["x"], None) == (None, None)
+
+
+def test_sniff_delimiter_picks_the_real_separator():
+    assert _sniff_delimiter("a,b,c,d\n1,2,3,4\n") == ","
+    assert _sniff_delimiter("a;b;c;d\n1;2;3;4\n") == ";"
+    assert _sniff_delimiter("a\tb\tc\n1\t2\t3\n") == "\t"
+    # a genuine single-column file has no separator: fall back to comma, don't
+    # invent one that would split values apart.
+    assert _sniff_delimiter("Ticker\nAAPL\nMSFT\n") == ","
+
+
+def test_parse_trading212_semicolon_delimited():
+    semi = (
+        "Action;Time;ISIN;Ticker;Name;No. of shares;Price / share;"
+        "Currency (Price / share);Exchange rate;Result;Currency (Result);Total;"
+        "Currency (Total);Withholding tax;Currency (Withholding tax);"
+        "Charge amount;Currency (Charge amount);Notes;ID\n"
+        "Market buy;2024-01-05 14:30:02;US0378331005;AAPL;Apple Inc;5.0000000;"
+        "180.00;USD;1.0900;;;826.19;EUR;;;0.50;EUR;;buy-1\n"
+    )
+    assert detect_format(semi) == ("trading212", "history")
+    rows, _ = parse_trading212(semi, "EUR")
+    buy = next(r for r in rows if r.type == "buy")
+    assert buy.ticker == "AAPL"
+    assert buy.shares == 5
+    assert abs(buy.amount + 825.69) < 1e-6
+    assert buy.fees == 0.5
 
 
 def test_isin_heuristic_suffixes():

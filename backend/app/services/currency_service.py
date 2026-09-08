@@ -2,13 +2,14 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import timedelta
 
 import yfinance as yf
 from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.models.cache import ApiCache
+from app.utils.time import utcnow
 
 # Yahoo minor-unit currency codes → (major ISO, divisor)
 MINOR_UNITS: dict[str, tuple[str, int]] = {
@@ -91,7 +92,7 @@ class CurrencyService:
         cache_key = f"fx:{from_iso}:{to_iso}"
         row = self.db.query(ApiCache).filter(ApiCache.cache_key == cache_key).first()
         if row:
-            age = datetime.utcnow() - row.created_at
+            age = utcnow() - row.created_at
             if age <= timedelta(seconds=FX_CACHE_TTL_SECONDS):
                 return float(json.loads(row.payload))
 
@@ -100,7 +101,7 @@ class CurrencyService:
         payload = json.dumps(rate)
         if row:
             row.payload = payload
-            row.created_at = datetime.utcnow()
+            row.created_at = utcnow()
         else:
             self.db.add(ApiCache(cache_key=cache_key, payload=payload))
         self.db.commit()

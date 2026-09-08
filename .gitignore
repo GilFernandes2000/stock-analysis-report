@@ -214,3 +214,6 @@ frontend/dist/
 # App database
 stock_analysis.db
 backend/stock_analysis.db
+
+# TS incremental build info (regenerated on every build)
+frontend/tsconfig.tsbuildinfo

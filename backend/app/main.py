@@ -6,9 +6,17 @@ from apscheduler.triggers.cron import CronTrigger
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import auth, currency, portfolios, reports, screener, stocks
+from app.api import (
+    auth,
+    currency,
+    favorites,
+    portfolios,
+    reports,
+    screener,
+    stocks,
+)
 from app.config import settings
-from app.database import init_db
+from app.database import upgrade_database
 from app.scheduler.jobs import run_scheduled_reports
 from app.static import mount_frontend
 
@@ -33,7 +41,7 @@ def _start_scheduler() -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    init_db()
+    upgrade_database()
     _start_scheduler()
     yield
     scheduler.shutdown(wait=False)
@@ -50,8 +58,8 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type"],
 )
 
 app.include_router(auth.router, prefix="/api")
@@ -59,6 +67,7 @@ app.include_router(stocks.router, prefix="/api")
 app.include_router(screener.router, prefix="/api")
 app.include_router(reports.router, prefix="/api")
 app.include_router(portfolios.router, prefix="/api")
+app.include_router(favorites.router, prefix="/api")
 app.include_router(currency.router, prefix="/api")
 
 

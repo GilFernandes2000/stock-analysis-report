@@ -33,38 +33,58 @@ class Settings(BaseSettings):
 
 settings = Settings()
 
+# All screens use the Overview table so the frontend can render one uniform,
+# sortable column set (ticker, company, sector, market cap, P/E, price, change,
+# volume) regardless of preset. The preset's `filters`/`order` still select and
+# rank the stocks; richer per-stock metrics are one click away on the detail page.
 SCREENER_PRESETS: dict[str, dict] = {
     "top_performers": {
         "label": "Top Performers",
         "description": "Momentum leaders with strong YTD and quarterly performance",
         "filters": ["idx_sp500", "cap_midover"],
-        "table": "Performance",
+        "table": "Overview",
         "order": "-perf_ytd",
-        "limit": 25,
+        "limit": 30,
     },
     "technical_signals": {
         "label": "Technical Signals",
         "description": "Stocks with golden cross and positive technical setup",
         "filters": ["ta_golden_cross", "cap_midover"],
-        "table": "Technical",
+        "table": "Overview",
         "order": "-marketcap",
-        "limit": 25,
+        "limit": 30,
     },
     "high_conviction": {
         "label": "High Conviction",
         "description": "High institutional ownership with low short interest",
         "filters": ["sh_instown_o90", "sh_short_low", "cap_midover"],
-        "table": "Ownership",
+        "table": "Overview",
         "order": "-marketcap",
-        "limit": 25,
+        "limit": 30,
     },
     "analyst_favorites": {
         "label": "Analyst Favorites",
-        "description": "Large caps with strong analyst upside potential",
+        "description": "Large caps with reasonable valuation",
         "filters": ["cap_largeover", "fa_pe_u50"],
-        "table": "Valuation",
+        "table": "Overview",
         "order": "-marketcap",
-        "limit": 25,
+        "limit": 30,
+    },
+    "oversold_quality": {
+        "label": "Oversold Quality",
+        "description": "Profitable large caps trading oversold (RSI < 40)",
+        "filters": ["cap_largeover", "fa_roe_pos", "ta_rsi_os40"],
+        "table": "Overview",
+        "order": "-marketcap",
+        "limit": 30,
+    },
+    "dividend_leaders": {
+        "label": "Dividend Leaders",
+        "description": "Large caps with a healthy dividend yield above 3%",
+        "filters": ["cap_largeover", "fa_div_o3"],
+        "table": "Overview",
+        "order": "-marketcap",
+        "limit": 30,
     },
     "europe_germany": {
         "label": "Europe — Germany",
@@ -72,7 +92,7 @@ SCREENER_PRESETS: dict[str, dict] = {
         "filters": ["geo_germany", "cap_midover"],
         "table": "Overview",
         "order": "-marketcap",
-        "limit": 25,
+        "limit": 30,
     },
     "europe_uk": {
         "label": "Europe — United Kingdom",
@@ -80,7 +100,7 @@ SCREENER_PRESETS: dict[str, dict] = {
         "filters": ["geo_uk", "cap_midover"],
         "table": "Overview",
         "order": "-marketcap",
-        "limit": 25,
+        "limit": 30,
     },
     "europe_france": {
         "label": "Europe — France",
@@ -88,8 +108,40 @@ SCREENER_PRESETS: dict[str, dict] = {
         "filters": ["geo_france", "cap_midover"],
         "table": "Overview",
         "order": "-marketcap",
-        "limit": 25,
+        "limit": 30,
     },
 }
 
+# "Movers" power the Market page — same Overview columns, ranked by daily action.
+MOVER_PRESETS: dict[str, dict] = {
+    "top_gainers": {
+        "label": "Top Gainers",
+        "description": "Largest daily percentage gains (mid-cap and up)",
+        "filters": ["cap_midover", "sh_avgvol_o500"],
+        "table": "Overview",
+        "order": "-change",
+        "limit": 30,
+    },
+    "top_losers": {
+        "label": "Top Losers",
+        "description": "Largest daily percentage declines (mid-cap and up)",
+        "filters": ["cap_midover", "sh_avgvol_o500"],
+        "table": "Overview",
+        "order": "change",
+        "limit": 30,
+    },
+    "most_active": {
+        "label": "Most Active",
+        "description": "Highest trading volume today",
+        "filters": ["cap_midover"],
+        "table": "Overview",
+        "order": "-volume",
+        "limit": 30,
+    },
+}
+
+# Combined lookup for the screener service (both are run the same way).
+ALL_SCREENS: dict[str, dict] = {**SCREENER_PRESETS, **MOVER_PRESETS}
+
+# Only the curated screens are used for scheduled/market reports.
 REPORT_TYPES = list(SCREENER_PRESETS.keys())

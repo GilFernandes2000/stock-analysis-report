@@ -1,5 +1,6 @@
 import type {
   AuthResponse,
+  Favorite,
   ImportCommitResult,
   ImportPreview,
   ImportRow,
@@ -7,6 +8,8 @@ import type {
   PortfolioAnalytics,
   PortfolioInsiderResponse,
   PortfolioSummary,
+  PresetMeta,
+  QuotesResponse,
   ReportDetail,
   ReportSummary,
   ScreenerResponse,
@@ -94,11 +97,21 @@ export const api = {
   getStock: (ticker: string) =>
     request<StockAnalysis>(withCurrency(`/api/stocks/${encodeURIComponent(ticker)}`)),
   listScreenerPresets: () =>
-    request<Record<string, { label: string; description: string }>>(
-      "/api/screener/presets"
-    ),
+    request<Record<string, PresetMeta>>("/api/screener/presets"),
+  listMovers: () => request<Record<string, PresetMeta>>("/api/screener/movers"),
   getScreener: (preset: string) =>
     request<ScreenerResponse>(`/api/screener/${encodeURIComponent(preset)}`),
+
+  // --- favorites ---
+  listFavorites: () => request<Favorite[]>("/api/favorites"),
+  addFavorite: (ticker: string) =>
+    request<Favorite>("/api/favorites", { method: "POST", ...json({ ticker }) }),
+  removeFavorite: (ticker: string) =>
+    request<void>(`/api/favorites/${encodeURIComponent(ticker)}`, {
+      method: "DELETE",
+    }),
+  favoriteQuotes: () =>
+    request<QuotesResponse>(withCurrency("/api/favorites/quotes")),
 
   // --- portfolios ---
   listPortfolios: (quotes = false) =>

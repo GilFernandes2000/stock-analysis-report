@@ -115,9 +115,18 @@ export interface ScreenerStockRow {
   ticker: string;
   company?: string | null;
   sector?: string | null;
+  industry?: string | null;
+  country?: string | null;
   price?: string | null;
   change?: string | null;
   market_cap?: string | null;
+  pe?: string | null;
+  volume?: string | null;
+  price_value?: number | null;
+  change_pct?: number | null;
+  market_cap_value?: number | null;
+  pe_value?: number | null;
+  volume_value?: number | null;
   extra: Record<string, string>;
 }
 
@@ -127,6 +136,42 @@ export interface ScreenerResponse {
   description: string;
   count: number;
   stocks: ScreenerStockRow[];
+  stale: boolean;
+}
+
+export interface PresetMeta {
+  label: string;
+  description: string;
+}
+
+// ---------------------------------------------------------------------------
+// Favorites & quotes
+// ---------------------------------------------------------------------------
+
+export interface Favorite {
+  id: number;
+  ticker: string;
+  note?: string | null;
+  created_at: string;
+}
+
+export interface Quote {
+  ticker: string;
+  name?: string | null;
+  sector?: string | null;
+  country?: string | null;
+  native_currency?: string | null;
+  native_price?: number | null;
+  display_currency: string;
+  price?: number | null;
+  change_pct?: number | null;
+  market_cap?: number | null;
+  pe?: number | null;
+}
+
+export interface QuotesResponse {
+  display_currency: string;
+  quotes: Quote[];
   stale: boolean;
 }
 

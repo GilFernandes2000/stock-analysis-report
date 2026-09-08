@@ -1,7 +1,7 @@
 import hashlib
 import hmac
 import secrets
-from datetime import datetime, timedelta
+from datetime import timedelta
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models.user import AuthSession, User
+from app.utils.time import utcnow
 
 PBKDF2_ITERATIONS = 200_000
 SESSION_TTL_DAYS = 30
@@ -43,9 +44,9 @@ class AuthService:
         username = username.strip().lower()
         if not username or not password:
             raise HTTPException(status_code=422, detail="Username and password required")
-        if len(password) < 6:
+        if len(password) < 8:
             raise HTTPException(
-                status_code=422, detail="Password must be at least 6 characters"
+                status_code=422, detail="Password must be at least 8 characters"
             )
         existing = self.db.query(User).filter(User.username == username).first()
         if existing:
@@ -75,7 +76,7 @@ class AuthService:
         session = AuthSession(
             token=token,
             user_id=user.id,
-            expires_at=datetime.utcnow() + timedelta(days=SESSION_TTL_DAYS),
+            expires_at=utcnow() + timedelta(days=SESSION_TTL_DAYS),
         )
         self.db.add(session)
         self.db.commit()
@@ -91,7 +92,7 @@ class AuthService:
         )
         if not session:
             return None
-        if session.expires_at < datetime.utcnow():
+        if session.expires_at < utcnow():
             self.db.delete(session)
             self.db.commit()
             return None

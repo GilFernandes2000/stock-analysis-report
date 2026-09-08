@@ -4,6 +4,7 @@ from sqlalchemy import DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
+from app.utils.time import utcnow
 
 
 class Report(Base):
@@ -22,5 +23,5 @@ class Report(Base):
     content_json: Mapped[str] = mapped_column(Text, nullable=False)
     content_markdown: Mapped[str] = mapped_column(Text, nullable=False, default="")
     created_at: Mapped[datetime] = mapped_column(
-        DateTime, default=datetime.utcnow, nullable=False, index=True
+        DateTime, default=utcnow, nullable=False, index=True
     )

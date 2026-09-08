@@ -28,12 +28,13 @@ def db_session() -> Generator[Session, None, None]:
 
 @pytest.fixture()
 def api_client(db_session: Session) -> Generator[TestClient, None, None]:
-    from app.api import auth, portfolios, reports
+    from app.api import auth, favorites, portfolios, reports
 
     app = FastAPI()
     app.include_router(auth.router, prefix="/api")
     app.include_router(portfolios.router, prefix="/api")
     app.include_router(reports.router, prefix="/api")
+    app.include_router(favorites.router, prefix="/api")
 
     def override_get_db():
         yield db_session
