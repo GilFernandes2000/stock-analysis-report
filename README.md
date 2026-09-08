@@ -87,8 +87,8 @@ duplicates are detected and skipped.
 ## Development
 
 ```bash
-cd backend && source .venv/bin/activate && ruff check . && pytest
-cd frontend && npm run build                         # type-check + build
+cd backend && source .venv/bin/activate && ruff check . && pytest --cov=app
+cd frontend && npm run build && npm test              # type-check + build + Vitest
 ```
 
 CI (`.github/workflows/ci.yml`) runs the same checks on every push and PR.
@@ -125,6 +125,14 @@ docker compose up --build
   (10 failures per username+IP per 15 min); it runs plain HTTP unless you put it
   behind TLS, and the rate-limit state is per-process (resets on restart, not
   shared across workers).
+- The session token is kept in the browser's `localStorage` (a deliberate
+  trade-off for a single-page app on a trusted network — it survives reloads and
+  needs no CSRF handling). If you expose this beyond a home LAN, move the token
+  to an `httpOnly` cookie and add CSRF protection.
+- CSV imports are capped at 10 MB. Report/tearsheet generation is limited to two
+  concurrent runs (further requests get `503`) so scraper work can't exhaust the
+  worker pool. Unhandled errors return a generic 500 — details are logged, not
+  sent to the client.
 - An ISIN listed on several exchanges resolves to the listing matching the trade
   currency when Yahoo offers one; otherwise valuation uses the instrument's real
   quote currency with FX conversion (e.g. VUSA bought in EUR still values

@@ -13,6 +13,7 @@ import { useAuth } from "../auth/AuthContext";
 interface FavoritesState {
   tickers: Set<string>;
   loading: boolean;
+  error: string | null;
   isFavorite: (ticker: string) => boolean;
   add: (ticker: string) => Promise<void>;
   remove: (ticker: string) => Promise<void>;
@@ -26,6 +27,7 @@ export function FavoritesProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   const [tickers, setTickers] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const refresh = useCallback(() => {
     if (!user) {
@@ -47,21 +49,24 @@ export function FavoritesProvider({ children }: { children: ReactNode }) {
   const add = useCallback(async (ticker: string) => {
     const t = ticker.trim().toUpperCase();
     if (!t) return;
+    setError(null);
     // optimistic
     setTickers((prev) => new Set(prev).add(t));
     try {
       await api.addFavorite(t);
-    } catch {
+    } catch (e) {
       setTickers((prev) => {
         const next = new Set(prev);
         next.delete(t);
         return next;
       });
+      setError(e instanceof Error ? e.message : `Couldn't add ${t} to favorites`);
     }
   }, []);
 
   const remove = useCallback(async (ticker: string) => {
     const t = ticker.trim().toUpperCase();
+    setError(null);
     setTickers((prev) => {
       const next = new Set(prev);
       next.delete(t);
@@ -69,8 +74,9 @@ export function FavoritesProvider({ children }: { children: ReactNode }) {
     });
     try {
       await api.removeFavorite(t);
-    } catch {
+    } catch (e) {
       setTickers((prev) => new Set(prev).add(t));
+      setError(e instanceof Error ? e.message : `Couldn't remove ${t} from favorites`);
     }
   }, []);
 
@@ -87,13 +93,14 @@ export function FavoritesProvider({ children }: { children: ReactNode }) {
     () => ({
       tickers,
       loading,
+      error,
       isFavorite: (t: string) => tickers.has(t.toUpperCase()),
       add,
       remove,
       toggle,
       refresh,
     }),
-    [tickers, loading, add, remove, toggle, refresh]
+    [tickers, loading, error, add, remove, toggle, refresh]
   );
 
   return (
