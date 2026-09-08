@@ -20,6 +20,7 @@ from sqlalchemy.orm import Session
 
 from app.models.cache import ApiCache
 from app.schemas.stock import InsiderSignal, InsiderTrade
+from app.utils.time import utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -102,7 +103,7 @@ def _parse_finviz_date(raw: str | None, now: datetime) -> datetime | None:
 
 
 def parse_finviz_rows(rows: list[dict], now: datetime | None = None) -> list[NormalizedTrade]:
-    now = now or datetime.utcnow()
+    now = now or utcnow()
     trades = []
     for row in rows:
         trades.append(
@@ -129,7 +130,7 @@ def analyze_insider_activity(
     window_days: int = DEFAULT_WINDOW_DAYS,
     now: datetime | None = None,
 ) -> InsiderSignal:
-    now = now or datetime.utcnow()
+    now = now or utcnow()
     cutoff = now - timedelta(days=window_days)
     cluster_cutoff = now - timedelta(days=CLUSTER_WINDOW_DAYS)
 
@@ -278,7 +279,7 @@ def yahoo_insider_rows(db: Session, ticker: str) -> list[dict]:
     """
     key = f"insideryf:{ticker.upper()}"
     row = db.query(ApiCache).filter(ApiCache.cache_key == key).first()
-    if row and datetime.utcnow() - row.created_at <= YF_CACHE_TTL:
+    if row and utcnow() - row.created_at <= YF_CACHE_TTL:
         return json.loads(row.payload)
 
     rows: list[dict] = []
@@ -315,7 +316,7 @@ def yahoo_insider_rows(db: Session, ticker: str) -> list[dict]:
     payload = json.dumps(rows)
     if row:
         row.payload = payload
-        row.created_at = datetime.utcnow()
+        row.created_at = utcnow()
     else:
         db.add(ApiCache(cache_key=key, payload=payload))
     db.commit()

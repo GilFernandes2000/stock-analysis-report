@@ -1,5 +1,4 @@
 import json
-from datetime import datetime
 from typing import Any
 
 from sqlalchemy.orm import Session
@@ -9,6 +8,7 @@ from app.models.report import Report
 from app.services.analysis import summarize_stock_for_report
 from app.services.finviz_client import FinvizService
 from app.services.stock_analysis import StockAnalysisService
+from app.utils.time import utcnow
 
 
 class ReportBuilder:
@@ -30,7 +30,7 @@ class ReportBuilder:
             "",
             f"_{preset['description']}_",
             "",
-            f"Generated: {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}",
+            f"Generated: {utcnow().strftime('%Y-%m-%d %H:%M UTC')}",
             "",
         ]
 
@@ -83,7 +83,7 @@ class ReportBuilder:
             "description": preset["description"],
             "stale": stale,
             "stocks": enriched,
-            "generated_at": datetime.utcnow().isoformat(),
+            "generated_at": utcnow().isoformat(),
         }
 
         report = Report(

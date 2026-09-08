@@ -21,6 +21,7 @@ from app.schemas.portfolio import (
 from app.services.auth import get_current_user
 from app.services.importers import ImportService
 from app.services.portfolio_analytics import PortfolioAnalyticsService
+from app.utils.time import utcnow
 
 router = APIRouter(prefix="/portfolios", tags=["portfolios"])
 
@@ -232,8 +233,6 @@ def portfolio_insider(
     db: Session = Depends(get_db),
 ):
     """Insider-trading read on every open position, with portfolio-level advice."""
-    from datetime import datetime
-
     from app.services.insider import get_insider_intel
     from app.services.positions import compute_positions
 
@@ -280,7 +279,7 @@ def portfolio_insider(
 
     return PortfolioInsiderResponse(
         portfolio_id=portfolio.id,
-        as_of=datetime.utcnow(),
+        as_of=utcnow(),
         holdings=holdings,
         advice=advice,
         no_data_tickers=no_data,

@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import datetime
 
 from sqlalchemy.orm import Session
 
@@ -17,6 +16,7 @@ from app.models.report import Report
 from app.schemas.portfolio import PortfolioAnalyticsResponse
 from app.services.portfolio_analytics import PortfolioAnalyticsService
 from app.services.stock_analysis import StockAnalysisService
+from app.utils.time import utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -75,7 +75,7 @@ class TearsheetBuilder:
         content = {
             "kind": "portfolio",
             "title": title,
-            "generated_at": datetime.utcnow().isoformat(),
+            "generated_at": utcnow().isoformat(),
             "portfolio_count": len(sections),
             "combined": combined,
             "sections": sections,

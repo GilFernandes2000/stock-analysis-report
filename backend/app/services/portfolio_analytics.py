@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 import logging
 import math
-from datetime import datetime, timedelta
+from datetime import timedelta
 
 import pandas as pd
 import yfinance as yf
@@ -36,6 +36,7 @@ from app.schemas.portfolio import (
     RiskMetrics,
 )
 from app.services.positions import CashFlows, PositionState, compute_positions
+from app.utils.time import utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -81,14 +82,14 @@ class TickerProfileCache:
     def get(self, ticker: str) -> dict:
         key = f"tickerprofile:{ticker.upper()}"
         row = self.db.query(ApiCache).filter(ApiCache.cache_key == key).first()
-        if row and datetime.utcnow() - row.created_at <= PROFILE_CACHE_TTL:
+        if row and utcnow() - row.created_at <= PROFILE_CACHE_TTL:
             return json.loads(row.payload)
 
         profile = self._fetch(ticker)
         payload = json.dumps(profile)
         if row:
             row.payload = payload
-            row.created_at = datetime.utcnow()
+            row.created_at = utcnow()
         else:
             self.db.add(ApiCache(cache_key=key, payload=payload))
         self.db.commit()
@@ -215,7 +216,7 @@ class PortfolioAnalyticsService:
         tickers = [p.ticker for p in open_positions]
         all_traded = sorted({p.ticker for p in positions.values()})
         currencies = {t: self._ticker_currency(t) for t in all_traded}
-        start = txns[0].date if txns else datetime.utcnow() - timedelta(days=30)
+        start = txns[0].date if txns else utcnow() - timedelta(days=30)
         closes: dict[str, pd.Series] = {}
         if all_traded or portfolio.benchmark:
             fx_pairs = self._fx_pairs(currencies.values(), base)
@@ -344,7 +345,7 @@ class PortfolioAnalyticsService:
             name=portfolio.name,
             base_currency=base,
             benchmark=portfolio.benchmark,
-            as_of=datetime.utcnow(),
+            as_of=utcnow(),
             market_value=round(market_value, 2),
             cost_basis=round(cost_open, 2),
             cash_balance=round(flows.cash_balance, 2),

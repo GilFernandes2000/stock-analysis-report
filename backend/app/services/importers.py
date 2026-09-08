@@ -18,6 +18,7 @@ import yfinance as yf
 from sqlalchemy.orm import Session
 
 from app.models.cache import ApiCache
+from app.utils.time import utcnow
 from app.models.portfolio import (
     TRANSACTION_TYPES,
     TXN_BUY,
@@ -605,7 +606,7 @@ class IsinResolver:
     ) -> str | None:
         cache_key = f"isin:{isin}"
         row = self.db.query(ApiCache).filter(ApiCache.cache_key == cache_key).first()
-        if row and datetime.utcnow() - row.created_at <= ISIN_CACHE_TTL:
+        if row and utcnow() - row.created_at <= ISIN_CACHE_TTL:
             cached = json.loads(row.payload)
             return cached or None
 
@@ -616,7 +617,7 @@ class IsinResolver:
         payload = json.dumps(symbol or "")
         if row:
             row.payload = payload
-            row.created_at = datetime.utcnow()
+            row.created_at = utcnow()
         else:
             self.db.add(ApiCache(cache_key=cache_key, payload=payload))
         self.db.commit()

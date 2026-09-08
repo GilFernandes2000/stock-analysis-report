@@ -1,7 +1,7 @@
 import json
 import re
 import time
-from datetime import datetime, timedelta
+from datetime import timedelta
 from collections.abc import Callable
 from typing import Any
 
@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from app.config import ALL_SCREENS, settings
 from app.models.cache import ApiCache
+from app.utils.time import utcnow
 
 _TICKER_RE = re.compile(r"^[A-Z][A-Z0-9.\-]{0,6}$")
 
@@ -87,7 +88,7 @@ class FinvizService:
         row = self.db.query(ApiCache).filter(ApiCache.cache_key == key).first()
         if not row:
             return None
-        age = datetime.utcnow() - row.created_at
+        age = utcnow() - row.created_at
         payload = json.loads(row.payload)
         is_fresh = age <= timedelta(seconds=settings.cache_ttl_seconds)
         return payload, is_fresh
@@ -97,7 +98,7 @@ class FinvizService:
         row = self.db.query(ApiCache).filter(ApiCache.cache_key == key).first()
         if row:
             row.payload = serialized
-            row.created_at = datetime.utcnow()
+            row.created_at = utcnow()
         else:
             row = ApiCache(cache_key=key, payload=serialized)
             self.db.add(row)

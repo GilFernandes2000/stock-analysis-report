@@ -4,6 +4,7 @@ from sqlalchemy import DateTime, Float, ForeignKey, Integer, String, Text, Uniqu
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
+from app.utils.time import utcnow
 
 # Transaction types
 TXN_BUY = "buy"
@@ -43,7 +44,7 @@ class Portfolio(Base):
     base_currency: Mapped[str] = mapped_column(String(8), nullable=False, default="EUR")
     benchmark: Mapped[str] = mapped_column(String(32), nullable=False, default="^GSPC")
     created_at: Mapped[datetime] = mapped_column(
-        DateTime, default=datetime.utcnow, nullable=False
+        DateTime, default=utcnow, nullable=False
     )
 
     user: Mapped["User"] = relationship(back_populates="portfolios")  # noqa: F821
@@ -85,7 +86,7 @@ class Transaction(Base):
     fx_rate: Mapped[float | None] = mapped_column(Float, nullable=True)
     note: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime, default=datetime.utcnow, nullable=False
+        DateTime, default=utcnow, nullable=False
     )
 
     portfolio: Mapped[Portfolio] = relationship(back_populates="transactions")
