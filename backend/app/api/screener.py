@@ -6,8 +6,8 @@ from app.database import get_db
 from app.schemas.report import ScreenerResponse, ScreenerStockRow
 from app.services.finviz_client import (
     FinvizService,
-    _parse_float,
-    _parse_percent,
+    parse_float,
+    parse_percent,
     parse_market_cap,
 )
 
@@ -42,11 +42,11 @@ def _build_row(row: dict[str, str]) -> ScreenerStockRow:
         market_cap=row.get("Market Cap"),
         pe=row.get("P/E"),
         volume=row.get("Volume"),
-        price_value=_parse_float(row.get("Price")),
-        change_pct=_parse_percent(row.get("Change")),
+        price_value=parse_float(row.get("Price")),
+        change_pct=parse_percent(row.get("Change")),
         market_cap_value=parse_market_cap(row.get("Market Cap")),
-        pe_value=_parse_float(row.get("P/E")),
-        volume_value=_parse_float(row.get("Volume")),
+        pe_value=parse_float(row.get("P/E")),
+        volume_value=parse_float(row.get("Volume")),
         extra=extra,
     )
 

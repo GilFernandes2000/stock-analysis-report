@@ -633,11 +633,11 @@ class IsinResolver:
                 # and on Euronext in EUR); prefer the listing whose currency
                 # matches the currency the trade settled in.
                 if currency:
-                    from app.services.portfolio_analytics import _major, _suffix_currency
+                    from app.services.market_math import major_currency, suffix_currency
 
-                    wanted = _major(currency)
+                    wanted = major_currency(currency)
                     for quote in quotes:
-                        if _major(_suffix_currency(quote["symbol"])) == wanted:
+                        if major_currency(suffix_currency(quote["symbol"])) == wanted:
                             return quote["symbol"]
                 return quotes[0].get("symbol")
         except Exception as exc:  # network / API shape changes

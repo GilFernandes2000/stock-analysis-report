@@ -35,6 +35,13 @@ from app.schemas.portfolio import (
     PositionResponse,
     RiskMetrics,
 )
+from app.services.market_math import (
+    extract_closes,
+    fx_pairs,
+    major_currency,
+    minor_divisor,
+    suffix_currency,
+)
 from app.services.positions import CashFlows, PositionState, compute_positions
 from app.utils.time import utcnow
 
@@ -42,35 +49,6 @@ logger = logging.getLogger(__name__)
 
 PROFILE_CACHE_TTL = timedelta(days=7)
 TRADING_DAYS = 252
-
-# Exchange suffix -> instrument currency fallback
-SUFFIX_CURRENCY: dict[str, str] = {
-    ".L": "GBp",
-    ".DE": "EUR", ".AS": "EUR", ".PA": "EUR", ".MI": "EUR", ".MC": "EUR",
-    ".BR": "EUR", ".VI": "EUR", ".HE": "EUR", ".IR": "EUR", ".LS": "EUR",
-    ".F": "EUR", ".BE": "EUR",
-    ".SW": "CHF", ".CO": "DKK", ".ST": "SEK", ".OL": "NOK",
-    ".TO": "CAD", ".AX": "AUD",
-}
-
-
-def _suffix_currency(ticker: str) -> str:
-    upper = ticker.upper()
-    for suffix, currency in SUFFIX_CURRENCY.items():
-        if upper.endswith(suffix):
-            return currency
-    return "USD"
-
-
-def _minor_divisor(currency: str | None) -> float:
-    return 100.0 if currency in ("GBp", "GBX", "ILA", "ZAc") else 1.0
-
-
-def _major(currency: str | None) -> str:
-    mapping = {"GBp": "GBP", "GBX": "GBP", "ILA": "ILS", "ZAc": "ZAR"}
-    if not currency:
-        return "USD"
-    return mapping.get(currency, currency.upper())
 
 
 class TickerProfileCache:
@@ -175,13 +153,13 @@ class PortfolioAnalyticsService:
     ) -> tuple[dict[str, float], dict[str, float]]:
         """Latest close per ticker converted to base currency + day change %."""
         currencies = {t: self._ticker_currency(t) for t in tickers}
-        fx_pairs = self._fx_pairs(currencies.values(), base_currency)
-        symbols = list(dict.fromkeys(tickers + fx_pairs))
+        pairs = fx_pairs(currencies.values(), base_currency)
+        symbols = list(dict.fromkeys(tickers + pairs))
         data = yf.download(
             symbols, period="10d", interval="1d", progress=False,
             auto_adjust=False, group_by="column", threads=True,
         )
-        closes = self._extract_closes(data, symbols)
+        closes = extract_closes(data, symbols)
         prices: dict[str, float] = {}
         changes: dict[str, float] = {}
         for ticker in tickers:
@@ -189,7 +167,7 @@ class PortfolioAnalyticsService:
             if series is None or series.dropna().empty:
                 continue
             clean = series.dropna()
-            native = float(clean.iloc[-1]) / _minor_divisor(currencies[ticker])
+            native = float(clean.iloc[-1]) / minor_divisor(currencies[ticker])
             rate = self._fx_last(closes, currencies[ticker], base_currency)
             prices[ticker] = native * rate
             if len(clean) >= 2 and float(clean.iloc[-2]):
@@ -219,14 +197,14 @@ class PortfolioAnalyticsService:
         start = txns[0].date if txns else utcnow() - timedelta(days=30)
         closes: dict[str, pd.Series] = {}
         if all_traded or portfolio.benchmark:
-            fx_pairs = self._fx_pairs(currencies.values(), base)
-            symbols = list(dict.fromkeys(all_traded + fx_pairs + [portfolio.benchmark]))
+            pairs = fx_pairs(currencies.values(), base)
+            symbols = list(dict.fromkeys(all_traded + pairs + [portfolio.benchmark]))
             try:
                 data = yf.download(
                     symbols, start=start.date() - timedelta(days=7), interval="1d",
                     progress=False, auto_adjust=False, group_by="column", threads=True,
                 )
-                closes = self._extract_closes(data, symbols)
+                closes = extract_closes(data, symbols)
             except Exception as exc:
                 logger.warning("History download failed: %s", exc)
                 stale = True
@@ -249,7 +227,7 @@ class PortfolioAnalyticsService:
             day_pct = None
             if series is not None and not series.dropna().empty:
                 clean = series.dropna()
-                divisor = _minor_divisor(currencies.get(pos.ticker))
+                divisor = minor_divisor(currencies.get(pos.ticker))
                 native_price = float(clean.iloc[-1]) / divisor
                 rate = self._fx_last(closes, currencies.get(pos.ticker), base)
                 price_base = native_price * rate
@@ -278,7 +256,7 @@ class PortfolioAnalyticsService:
                     cost_basis=round(pos.cost_basis, 2),
                     current_price=round(price_base, 4) if price_base is not None else None,
                     native_price=round(native_price, 4) if native_price is not None else None,
-                    native_currency=_major(currencies.get(pos.ticker)),
+                    native_currency=major_currency(currencies.get(pos.ticker)),
                     market_value=round(value, 2) if value is not None else None,
                     unrealized_pnl=round(unrealized, 2) if unrealized is not None else None,
                     unrealized_pnl_pct=round(unrealized / pos.cost_basis * 100, 2)
@@ -409,43 +387,12 @@ class PortfolioAnalyticsService:
         )
         if txn and txn.currency:
             return txn.currency
-        return _suffix_currency(ticker)
-
-    @staticmethod
-    def _fx_pairs(currencies, base: str) -> list[str]:
-        pairs = []
-        for currency in set(currencies):
-            major = _major(currency)
-            if major and major != base:
-                pairs.append(f"{major}{base}=X")
-        return pairs
-
-    @staticmethod
-    def _extract_closes(data: pd.DataFrame, symbols: list[str]) -> dict[str, pd.Series]:
-        closes: dict[str, pd.Series] = {}
-        if data is None or data.empty:
-            return closes
-        if isinstance(data.columns, pd.MultiIndex):
-            close = data["Close"] if "Close" in data.columns.get_level_values(0) else None
-            if close is None:
-                return closes
-            for symbol in symbols:
-                if symbol in close.columns:
-                    series = close[symbol]
-                    series.index = pd.to_datetime(series.index).tz_localize(None).normalize()
-                    closes[symbol] = series
-        else:
-            # single symbol download
-            if "Close" in data.columns and symbols:
-                series = data["Close"]
-                series.index = pd.to_datetime(series.index).tz_localize(None).normalize()
-                closes[symbols[0]] = series
-        return closes
+        return suffix_currency(ticker)
 
     def _fx_last(
         self, closes: dict[str, pd.Series], currency: str | None, base: str
     ) -> float:
-        major = _major(currency)
+        major = major_currency(currency)
         if major == base:
             return 1.0
         series = closes.get(f"{major}{base}=X")
@@ -478,7 +425,7 @@ class PortfolioAnalyticsService:
         # FX frame aligned to price dates
         fx_frame = pd.DataFrame(index=price_frame.index)
         for ticker in price_frame.columns:
-            major = _major(currencies.get(ticker))
+            major = major_currency(currencies.get(ticker))
             if major == base:
                 fx_frame[ticker] = 1.0
             else:
@@ -488,7 +435,7 @@ class PortfolioAnalyticsService:
                 else:
                     fx_frame[ticker] = 1.0
         divisors = {
-            t: _minor_divisor(currencies.get(t)) for t in price_frame.columns
+            t: minor_divisor(currencies.get(t)) for t in price_frame.columns
         }
 
         # Shares held per day (event-based cumulative)

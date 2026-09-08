@@ -47,7 +47,7 @@ def _fix_screener_row(row: dict[str, str]) -> dict[str, str]:
     return row
 
 
-def _parse_float(value: str | float | int | None) -> float | None:
+def parse_float(value: str | float | int | None) -> float | None:
     if value is None:
         return None
     if isinstance(value, (int, float)):
@@ -61,8 +61,8 @@ def _parse_float(value: str | float | int | None) -> float | None:
         return None
 
 
-def _parse_percent(value: str | float | int | None) -> float | None:
-    return _parse_float(value)
+def parse_percent(value: str | float | int | None) -> float | None:
+    return parse_float(value)
 
 
 def parse_market_cap(value: str | None) -> float | None:
@@ -193,16 +193,16 @@ class FinvizService:
     @staticmethod
     def extract_numeric_fields(stock: dict[str, Any]) -> dict[str, float | None]:
         return {
-            "price": _parse_float(stock.get("Price")),
-            "rsi": _parse_float(stock.get("RSI (14)")),
-            "sma20": _parse_percent(stock.get("SMA20")),
-            "sma50": _parse_percent(stock.get("SMA50")),
-            "sma200": _parse_percent(stock.get("SMA200")),
-            "beta": _parse_float(stock.get("Beta")),
-            "perf_week": _parse_percent(stock.get("Perf Week")),
-            "perf_month": _parse_percent(stock.get("Perf Month")),
-            "perf_quarter": _parse_percent(stock.get("Perf Quarter")),
-            "perf_ytd": _parse_percent(stock.get("Perf YTD")),
+            "price": parse_float(stock.get("Price")),
+            "rsi": parse_float(stock.get("RSI (14)")),
+            "sma20": parse_percent(stock.get("SMA20")),
+            "sma50": parse_percent(stock.get("SMA50")),
+            "sma200": parse_percent(stock.get("SMA200")),
+            "beta": parse_float(stock.get("Beta")),
+            "perf_week": parse_percent(stock.get("Perf Week")),
+            "perf_month": parse_percent(stock.get("Perf Month")),
+            "perf_quarter": parse_percent(stock.get("Perf Quarter")),
+            "perf_ytd": parse_percent(stock.get("Perf YTD")),
         }
 
     @staticmethod
@@ -211,7 +211,7 @@ class FinvizService:
         for target in targets:
             for field in ("target_to", "target_from", "Target"):
                 val = target.get(field)
-                parsed = _parse_float(val)
+                parsed = parse_float(val)
                 if parsed is not None:
                     values.append(parsed)
                     break
