@@ -2,7 +2,9 @@ from datetime import datetime
 
 from app.services.importers import (
     IsinResolver,
+    _money_pair,
     _parse_number,
+    _sniff_delimiter,
     detect_format,
     parse_degiro_account,
     parse_degiro_transactions,
@@ -170,6 +172,48 @@ def test_parse_trading212():
 
     deposit = by_type["deposit"]
     assert deposit.amount == 1000.0
+
+
+def test_money_pair_handles_both_column_orderings():
+    # classic Degiro: amount then currency
+    assert _money_pair(["x", "-1380,00", "EUR", "y"], 1) == (-1380.0, "EUR")
+    # flatexDEGIRO: currency then amount
+    assert _money_pair(["x", "EUR", "-1380,00", "y"], 1) == (-1380.0, "EUR")
+    # amount with no currency cell
+    assert _money_pair(["x", "42,50", "", "y"], 1) == (42.5, None)
+    # zero amount is a real value, not "missing"
+    assert _money_pair(['x', '0,00', 'EUR'], 1) == (0.0, "EUR")
+    # nothing usable
+    assert _money_pair(["x", "", ""], 1) == (None, None)
+    # no column
+    assert _money_pair(["x"], None) == (None, None)
+
+
+def test_sniff_delimiter_picks_the_real_separator():
+    assert _sniff_delimiter("a,b,c,d\n1,2,3,4\n") == ","
+    assert _sniff_delimiter("a;b;c;d\n1;2;3;4\n") == ";"
+    assert _sniff_delimiter("a\tb\tc\n1\t2\t3\n") == "\t"
+    # a genuine single-column file has no separator: fall back to comma, don't
+    # invent one that would split values apart.
+    assert _sniff_delimiter("Ticker\nAAPL\nMSFT\n") == ","
+
+
+def test_parse_trading212_semicolon_delimited():
+    semi = (
+        "Action;Time;ISIN;Ticker;Name;No. of shares;Price / share;"
+        "Currency (Price / share);Exchange rate;Result;Currency (Result);Total;"
+        "Currency (Total);Withholding tax;Currency (Withholding tax);"
+        "Charge amount;Currency (Charge amount);Notes;ID\n"
+        "Market buy;2024-01-05 14:30:02;US0378331005;AAPL;Apple Inc;5.0000000;"
+        "180.00;USD;1.0900;;;826.19;EUR;;;0.50;EUR;;buy-1\n"
+    )
+    assert detect_format(semi) == ("trading212", "history")
+    rows, _ = parse_trading212(semi, "EUR")
+    buy = next(r for r in rows if r.type == "buy")
+    assert buy.ticker == "AAPL"
+    assert buy.shares == 5
+    assert abs(buy.amount + 825.69) < 1e-6
+    assert buy.fees == 0.5
 
 
 def test_isin_heuristic_suffixes():

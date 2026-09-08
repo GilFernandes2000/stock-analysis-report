@@ -2,7 +2,9 @@ import io
 
 from fastapi.testclient import TestClient
 
-from tests.test_importers import DEGIRO_TRANSACTIONS
+from app.models.portfolio import Transaction
+from app.services.positions import compute_positions
+from tests.test_importers import DEGIRO_ACCOUNT, DEGIRO_TRANSACTIONS
 
 
 def test_register_login_me_logout(api_client: TestClient):
@@ -143,3 +145,68 @@ def test_import_preview_and_commit(api_client: TestClient, auth_headers, monkeyp
         headers=auth_headers,
     )
     assert commit2.json() == {"imported": 0, "skipped": 3}
+
+
+def _import(api_client, headers, pid, filename, csv_text, ticker_map=None):
+    preview = api_client.post(
+        f"/api/portfolios/{pid}/import/preview",
+        files={"file": (filename, io.BytesIO(csv_text.encode()), "text/csv")},
+        headers=headers,
+    )
+    assert preview.status_code == 200, preview.text
+    rows = preview.json()["rows"]
+    for row in rows:
+        if ticker_map and row.get("isin") in ticker_map:
+            row["ticker"] = ticker_map[row["isin"]]
+    commit = api_client.post(
+        f"/api/portfolios/{pid}/import/commit",
+        json={"rows": rows, "skip_duplicates": True},
+        headers=headers,
+    )
+    assert commit.status_code == 200, commit.text
+    return commit.json()
+
+
+def test_degiro_import_produces_correct_accounting(api_client, auth_headers, monkeypatch):
+    """End to end: parsed Degiro rows must flow into correct positions and cash flows."""
+    monkeypatch.setattr(
+        "app.services.importers.IsinResolver._lookup",
+        staticmethod(lambda isin, currency=None: None),
+    )
+    pid = api_client.post(
+        "/api/portfolios",
+        json={"name": "Degiro", "broker": "degiro"},
+        headers=auth_headers,
+    ).json()["id"]
+
+    tickers = {"US0378331005": "AAPL", "NL0010273215": "ASML.AS"}
+    _import(api_client, auth_headers, pid, "Transactions.csv", DEGIRO_TRANSACTIONS, tickers)
+    # The account file's Buy row is dropped by the parser (it belongs to
+    # Transactions.csv); deposit / dividend / dividend-tax / fee remain.
+    account = _import(api_client, auth_headers, pid, "Account.csv", DEGIRO_ACCOUNT, tickers)
+    assert account["imported"] == 4 and account["skipped"] == 0
+
+    listed = api_client.get(
+        f"/api/portfolios/{pid}/transactions", headers=auth_headers
+    ).json()
+    txns = [
+        Transaction(
+            type=t["type"], date=t["date"], ticker=t.get("ticker"),
+            shares=t.get("shares"), amount=t.get("amount") or 0.0,
+            fees=t.get("fees") or 0.0,
+        )
+        for t in listed
+    ]
+    positions, flows = compute_positions(txns)
+
+    aapl = positions["AAPL"]
+    assert aapl.shares == 6
+    assert abs(aapl.avg_cost - 138.2) < 1e-6          # (1380 + 2 fee) / 10
+    assert abs(aapl.realized_pnl - (628 - 138.2 * 4)) < 1e-6
+    assert positions["ASML.AS"].shares == 2
+    assert abs(positions["ASML.AS"].cost_basis - 1201.0) < 1e-6
+
+    assert flows.deposits == 2000.0
+    assert abs(flows.dividends - 2.0) < 0.02          # USD 2.17 / FX 1.0850
+    assert abs(flows.taxes - 0.30) < 0.02             # USD 0.33 / FX 1.0850
+    assert abs(flows.fees - 7.5) < 0.05               # trades 2+2+1 + account 2.50
