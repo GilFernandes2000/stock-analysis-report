@@ -470,11 +470,43 @@ _T212_FEE_COLUMNS = (
 )
 
 
+def _t212_get(rec: dict[str, str], *names: str) -> str:
+    """First non-empty value among the given normalized header names.
+
+    Falls back to any key that *starts with* the first name, so a renamed
+    column like ``Time (UTC)`` still resolves for ``_t212_get(rec, "time")``.
+    """
+    for name in names:
+        value = rec.get(name)
+        if value:
+            return value
+    prefix = names[0]
+    for key, value in rec.items():
+        if value and key.startswith(prefix):
+            return value
+    return ""
+
+
+_T212_DATE_FORMATS = (
+    "%Y-%m-%d %H:%M:%S",
+    "%Y-%m-%d %H:%M:%S.%f",
+    "%Y-%m-%d %H:%M:%S%z",
+    "%Y-%m-%dT%H:%M:%S%z",
+    "%Y-%m-%dT%H:%M:%S.%f%z",
+    "%d/%m/%Y %H:%M:%S",
+    "%d/%m/%Y %H:%M",
+    "%Y-%m-%d",
+    "%d/%m/%Y",
+)
+
+
 def _t212_date(raw: str) -> datetime | None:
     raw = (raw or "").strip()
-    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M:%S.%f", "%d/%m/%Y %H:%M:%S"):
+    if not raw:
+        return None
+    for fmt in _T212_DATE_FORMATS:
         try:
-            return datetime.strptime(raw, fmt)
+            return datetime.strptime(raw, fmt).replace(tzinfo=None)
         except ValueError:
             continue
     try:
@@ -489,12 +521,21 @@ def parse_trading212(text: str, base_currency: str) -> tuple[list[ImportRow], li
     warnings: list[str] = []
     skipped_actions: set[str] = set()
     mismatched_currency = False
+    no_action = 0
+    bad_date = 0
+    bad_date_sample = ""
 
     for record in reader:
         rec = {_norm_header(k or ""): (v or "").strip() for k, v in record.items()}
-        action = rec.get("action", "").lower()
-        date = _t212_date(rec.get("time", ""))
-        if not action or date is None:
+        action = _t212_get(rec, "action").lower()
+        raw_date = _t212_get(rec, "time", "time (utc)")
+        date = _t212_date(raw_date)
+        if not action:
+            no_action += 1
+            continue
+        if date is None:
+            bad_date += 1
+            bad_date_sample = bad_date_sample or raw_date
             continue
 
         total = _parse_number(rec.get("total"))
@@ -509,7 +550,9 @@ def parse_trading212(text: str, base_currency: str) -> tuple[list[ImportRow], li
         ticker = rec.get("ticker") or None
         isin = (rec.get("isin") or "").upper() or None
         name = rec.get("name") or None
-        shares = _parse_number(rec.get("no. of shares"))
+        shares = _parse_number(
+            _t212_get(rec, "no. of shares", "number of shares", "shares")
+        )
         price = _parse_number(rec.get("price / share"))
         price_ccy = (rec.get("currency (price / share)") or "").upper() or None
         fx = _parse_number(rec.get("exchange rate"))
@@ -577,8 +620,18 @@ def parse_trading212(text: str, base_currency: str) -> tuple[list[ImportRow], li
         elif "currency conversion" in action:
             continue
         else:
-            skipped_actions.add(rec.get("action", action))
+            skipped_actions.add(_t212_get(rec, "action") or action)
 
+    if bad_date:
+        warnings.append(
+            f"Skipped {bad_date} row(s): couldn't parse the date value "
+            f"'{bad_date_sample}'. Report this format so it can be added."
+        )
+    if no_action and not rows:
+        warnings.append(
+            f"Skipped {no_action} rows: the Action column was empty — the file "
+            "may use an unexpected delimiter or header layout."
+        )
     if skipped_actions:
         warnings.append(f"Skipped unsupported actions: {', '.join(sorted(skipped_actions))}")
     if mismatched_currency:
@@ -690,7 +743,9 @@ def detect_format(text: str) -> tuple[str, str] | None:
     headers = [_norm_header(h) for h in next(_reader(first_line), [])]
     header_set = set(headers)
 
-    if "action" in header_set and any("no. of shares" in h for h in headers):
+    if "action" in header_set and any(
+        s in h for h in headers for s in ("no. of shares", "number of shares")
+    ):
         return "trading212", "history"
 
     has_isin = "isin" in header_set
