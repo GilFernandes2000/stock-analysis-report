@@ -38,6 +38,10 @@ include = ["app*"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
+# Put the backend root on sys.path so `from tests.x import ...` resolves under
+# the bare `pytest` entrypoint (which, unlike `python -m pytest`, doesn't add
+# the CWD).
+pythonpath = ["."]
 
 [tool.ruff]
 target-version = "py311"
