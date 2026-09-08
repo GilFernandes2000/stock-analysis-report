@@ -63,11 +63,14 @@ def remove_favorite(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    normalized = normalize_ticker(ticker)
+    if not is_valid_ticker(normalized):
+        raise HTTPException(status_code=422, detail=f"Invalid ticker: {ticker}")
     deleted = (
         db.query(Favorite)
         .filter(
             Favorite.user_id == user.id,
-            Favorite.ticker == normalize_ticker(ticker),
+            Favorite.ticker == normalized,
         )
         .delete()
     )

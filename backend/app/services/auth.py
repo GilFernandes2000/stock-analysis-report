@@ -44,9 +44,9 @@ class AuthService:
         username = username.strip().lower()
         if not username or not password:
             raise HTTPException(status_code=422, detail="Username and password required")
-        if len(password) < 6:
+        if len(password) < 8:
             raise HTTPException(
-                status_code=422, detail="Password must be at least 6 characters"
+                status_code=422, detail="Password must be at least 8 characters"
             )
         existing = self.db.query(User).filter(User.username == username).first()
         if existing:

@@ -101,7 +101,7 @@ export function Login() {
                 onChange={(e) => setPassword(e.target.value)}
                 autoComplete={mode === "login" ? "current-password" : "new-password"}
                 required
-                minLength={6}
+                minLength={mode === "login" ? 6 : 8}
               />
             </Field>
             {error && <ErrorNote message={error} />}

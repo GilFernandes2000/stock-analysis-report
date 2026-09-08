@@ -105,8 +105,10 @@ docker compose up --build
   (`yfinance`); quotes are delayed. **Not intended for live trading; not
   investment advice.**
 - SQLite storage (`backend/stock_analysis.db`); auth is designed for a trusted
-  local/home-server deployment (no rate limiting, plain HTTP unless you put it
-  behind TLS).
+  local/home-server deployment. Login has a best-effort in-process rate limit
+  (10 failures per username+IP per 15 min); it runs plain HTTP unless you put it
+  behind TLS, and the rate-limit state is per-process (resets on restart, not
+  shared across workers).
 - An ISIN listed on several exchanges resolves to the listing matching the trade
   currency when Yahoo offers one; otherwise valuation uses the instrument's real
   quote currency with FX conversion (e.g. VUSA bought in EUR still values
