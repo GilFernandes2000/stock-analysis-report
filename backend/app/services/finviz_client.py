@@ -1,4 +1,5 @@
 import json
+import re
 import time
 from datetime import datetime, timedelta
 from collections.abc import Callable
@@ -8,8 +9,41 @@ import finviz
 from finviz.screener import Screener
 from sqlalchemy.orm import Session
 
-from app.config import SCREENER_PRESETS, settings
+from app.config import ALL_SCREENS, settings
 from app.models.cache import ApiCache
+
+_TICKER_RE = re.compile(r"^[A-Z][A-Z0-9.\-]{0,6}$")
+
+
+def _fix_screener_row(row: dict[str, str]) -> dict[str, str]:
+    """Realign a Finviz screener row when a ticker-logo column is present.
+
+    Finviz injects a logo cell (a single letter matching the real ticker's
+    first character) ahead of the ticker. The pinned ``finviz`` library uses a
+    hardcoded header list that doesn't include it, so every value ends up one
+    column to the right of its label (ticker "ZTS" lands under "Perf Week",
+    price under "Change", etc.). Detect that injected cell and shift the values
+    back into alignment. Self-guarding: only shifts when the logo pattern is
+    unambiguously present, so it's a no-op if Finviz drops the column again.
+    """
+    keys = list(row.keys())
+    values = list(row.values())
+    if "Ticker" not in keys:
+        return row
+    ti = keys.index("Ticker")
+    if ti + 1 >= len(values):
+        return row
+    logo, nxt = values[ti], values[ti + 1]
+    if (
+        len(logo) == 1
+        and logo.isalpha()
+        and logo.isupper()
+        and _TICKER_RE.match(nxt or "")
+        and nxt[0] == logo
+    ):
+        realigned = values[:ti] + values[ti + 1 :]
+        return dict(zip(keys, realigned))
+    return row
 
 
 def _parse_float(value: str | float | int | None) -> float | None:
@@ -28,6 +62,21 @@ def _parse_float(value: str | float | int | None) -> float | None:
 
 def _parse_percent(value: str | float | int | None) -> float | None:
     return _parse_float(value)
+
+
+def parse_market_cap(value: str | None) -> float | None:
+    """Finviz market cap like '1.23B', '456.7M', '2.1T' -> absolute float."""
+    if not value or value in ("-", "--"):
+        return None
+    text = str(value).strip().upper().replace(",", "")
+    mult = 1.0
+    if text and text[-1] in ("K", "M", "B", "T"):
+        mult = {"K": 1e3, "M": 1e6, "B": 1e9, "T": 1e12}[text[-1]]
+        text = text[:-1]
+    try:
+        return float(text) * mult
+    except ValueError:
+        return None
 
 
 class FinvizService:
@@ -116,10 +165,10 @@ class FinvizService:
         )
 
     def run_screener(self, preset: str) -> tuple[list[dict[str, str]], bool]:
-        if preset not in SCREENER_PRESETS:
+        if preset not in ALL_SCREENS:
             raise ValueError(f"Unknown screener preset: {preset}")
 
-        config = SCREENER_PRESETS[preset]
+        config = ALL_SCREENS[preset]
         key = f"screener:{preset}"
 
         def fetch() -> list[dict[str, str]]:
@@ -133,7 +182,7 @@ class FinvizService:
             for i, stock in enumerate(stock_list):
                 if i >= limit:
                     break
-                results.append(dict(stock))
+                results.append(_fix_screener_row(dict(stock)))
                 if i > 0 and i % 20 == 0:
                     time.sleep(settings.finviz_request_delay)
             return results

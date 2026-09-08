@@ -48,6 +48,64 @@ def test_detect_format():
     assert detect_format("foo,bar\n1,2\n") is None
 
 
+def test_detect_and_parse_semicolon_and_tab_delimited():
+    # Degiro exports with commas in some regions and semicolons in others
+    # (comma is the EU decimal separator); pasted files may be tab-separated.
+    semi = (
+        "Date;Time;Value date;Product;ISIN;Description;FX;Change;;Balance;;Order Id\n"
+        "01-04-2024;08:10;01-04-2024;APPLE INC;US0378331005;Dividend;;2,88;EUR;2500,00;EUR;\n"
+    )
+    assert detect_format(semi) == ("degiro", "account")
+    rows, _ = parse_degiro_account(semi, "EUR")
+    assert len(rows) == 1
+    assert rows[0].type == "dividend"
+    assert abs(rows[0].amount - 2.88) < 1e-6
+
+    tab = (
+        "Date\tTime\tProduct\tISIN\tExchange\tVenue\tQuantity\tPrice\t\tLocal value"
+        "\t\tValue\t\tExchange rate\tTransaction and/or third party fees\t\tTotal\t\tOrder ID\n"
+        "02-01-2024\t09:30\tAPPLE INC\tUS0378331005\tNDQ\tXNAS\t10\t150,00\tUSD"
+        "\t-1500,00\tUSD\t-1380,00\tEUR\t1,0870\t-2,00\tEUR\t-1382,00\tEUR\tord-1\n"
+    )
+    assert detect_format(tab) == ("degiro", "transactions")
+    trows, _ = parse_degiro_transactions(tab, "EUR")
+    assert len(trows) == 1
+    assert trows[0].type == "buy"
+    assert trows[0].shares == 10
+    assert abs(trows[0].amount + 1380.0) < 1e-6
+    assert abs(trows[0].fees - 2.0) < 1e-6
+
+
+def test_parse_flatexdegiro_account_currency_first():
+    # flatexDEGIRO variant: the "Change"/"Balance" columns hold the CURRENCY and
+    # the amount sits in the following unnamed column (reverse of classic).
+    text = (
+        "Date,Time,Value date,Product,ISIN,Description,FX,Change,,Balance,,Order Id\n"
+        '05-07-2026,11:10,30-06-2026,,,Flatex Interest Income,,EUR,"0,00",EUR,"117,60",\n'
+        '02-07-2026,11:04,30-06-2026,,,Connectivity Fee DEGIRO 2026,,EUR,"-0,02",EUR,"117,60",\n'
+        '01-04-2026,08:10,01-04-2026,APPLE INC,US0378331005,Dividend,,EUR,"12,50",EUR,"130,10",\n'
+    )
+    assert detect_format(text) == ("degiro", "account")
+    rows, _ = parse_degiro_account(text, "EUR")
+    by_type = {r.type: r for r in rows}
+    # zero-amount interest is skipped; fee and dividend are captured
+    assert "fee" in by_type and abs(by_type["fee"].amount + 0.02) < 1e-6
+    assert "dividend" in by_type
+    assert abs(by_type["dividend"].amount - 12.50) < 1e-6
+    assert by_type["dividend"].isin == "US0378331005"
+
+
+def test_detect_account_across_locales():
+    # Degiro account statements are identified by the running Balance/Saldo
+    # column, which is stable across export languages.
+    en = "Date,Time,Value date,Product,ISIN,Description,FX,Change,,Balance,,Order Id\n"
+    nl = "Datum,Tijd,Valutadatum,Product,ISIN,Omschrijving,FX,Mutatie,,Saldo,,Order Id\n"
+    pt = "Data,Hora,Data Valor,Produto,ISIN,Descrição,Câmbio,,Variação,,Saldo,,ID da Ordem\n"
+    es = "Fecha,Hora,Fecha valor,Producto,ISIN,Descripción,,Variación,,Saldo,,ID de la orden\n"
+    for text in (en, nl, pt, es):
+        assert detect_format(text) == ("degiro", "account")
+
+
 def test_parse_degiro_transactions():
     rows, warnings = parse_degiro_transactions(DEGIRO_TRANSACTIONS, "EUR")
     assert len(rows) == 3

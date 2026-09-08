@@ -1,26 +1,28 @@
 import { useEffect, useState } from "react";
 import { api } from "../api/client";
-import { ScreenerStockCard } from "../components/StockCard";
+import { StockTable, type TableRow } from "../components/StockTable";
 import { ErrorNote, LoadingSkeleton, StaleBadge } from "../components/ui";
 import { usePageTitle } from "../hooks/usePageTitle";
-import type { ScreenerResponse } from "../types";
+import type { PresetMeta, ScreenerResponse, ScreenerStockRow } from "../types";
 
-const PRESET_ORDER = [
-  "top_performers",
-  "technical_signals",
-  "high_conviction",
-  "analyst_favorites",
-  "europe_germany",
-  "europe_uk",
-  "europe_france",
-] as const;
+function toRow(s: ScreenerStockRow): TableRow {
+  return {
+    ticker: s.ticker,
+    name: s.company,
+    sector: s.sector,
+    price: s.price_value,
+    priceCurrency: "USD", // Finviz screener quotes are USD
+    changePct: s.change_pct,
+    marketCap: s.market_cap_value,
+    pe: s.pe_value,
+  };
+}
 
 export function Screener() {
   usePageTitle("Screener");
-  const [presets, setPresets] = useState<
-    Record<string, { label: string; description: string }>
-  >({});
-  const [activePreset, setActivePreset] = useState<string>(PRESET_ORDER[0]);
+  const [presets, setPresets] = useState<Record<string, PresetMeta>>({});
+  const [order, setOrder] = useState<string[]>([]);
+  const [active, setActive] = useState<string>("");
   const [data, setData] = useState<ScreenerResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -28,45 +30,50 @@ export function Screener() {
   useEffect(() => {
     api
       .listScreenerPresets()
-      .then(setPresets)
+      .then((p) => {
+        setPresets(p);
+        const keys = Object.keys(p);
+        setOrder(keys);
+        setActive((cur) => cur || keys[0] || "");
+      })
       .catch((e) => setError(e.message));
   }, []);
 
   useEffect(() => {
-    if (!activePreset) return;
+    if (!active) return;
     setLoading(true);
     setError(null);
     api
-      .getScreener(activePreset)
+      .getScreener(active)
       .then(setData)
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
-  }, [activePreset]);
+  }, [active]);
 
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold tracking-tight text-ink">Screener</h1>
         <p className="mt-1 text-sm text-muted">
-          Curated Finviz screens for momentum, technical and conviction ideas.
+          Curated Finviz screens — sort any column, star a stock to track it, click
+          through for full research.
         </p>
       </div>
 
       <div className="flex flex-wrap gap-2">
-        {PRESET_ORDER.map((key) => {
+        {order.map((key) => {
           const meta = presets[key];
-          const label = meta?.label ?? key.replace(/_/g, " ");
           return (
             <button
               key={key}
-              onClick={() => setActivePreset(key)}
-              className={`rounded-xl border px-4 py-2 text-sm font-medium transition ${
-                activePreset === key
+              onClick={() => setActive(key)}
+              className={`rounded-xl border px-3.5 py-2 text-sm font-medium transition ${
+                active === key
                   ? "border-accent bg-accent/10 text-accent"
                   : "border-edge text-ink2 hover:border-accent/50 hover:text-ink"
               }`}
             >
-              {label}
+              {meta?.label ?? key.replace(/_/g, " ")}
             </button>
           );
         })}
@@ -85,12 +92,17 @@ export function Screener() {
       {loading ? (
         <LoadingSkeleton rows={6} />
       ) : data ? (
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {data.stocks.map((stock) => (
-            <ScreenerStockCard key={stock.ticker} stock={stock} />
-          ))}
-        </div>
+        <StockTable
+          rows={data.stocks.map(toRow)}
+          emptyMessage="No stocks matched this screen right now."
+        />
       ) : null}
+
+      <p className="text-[11px] text-muted">
+        Screener prices are Finviz USD quotes and may be delayed. European local
+        listings (e.g. SAP.DE) are best viewed via search or your portfolio, which
+        use Yahoo Finance with native-currency handling.
+      </p>
     </div>
   );
 }

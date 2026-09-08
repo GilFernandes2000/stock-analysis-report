@@ -11,6 +11,7 @@ import hashlib
 import io
 import json
 import logging
+import re
 from datetime import datetime, timedelta
 
 import yfinance as yf
@@ -118,6 +119,35 @@ def _decode(content: bytes) -> str:
     return content.decode("utf-8", errors="replace")
 
 
+_CANDIDATE_DELIMITERS = (",", ";", "\t", "|")
+
+
+def _split_header(text: str, delimiter: str) -> list[str]:
+    first_line = text.split("\n", 1)[0]
+    row = next(csv.reader(io.StringIO(first_line), delimiter=delimiter), [])
+    return [_norm_header(h) for h in row]
+
+
+def _sniff_delimiter(text: str) -> str:
+    """Pick the delimiter that actually splits the header into the most columns.
+
+    Broker exports vary by region: Degiro uses commas in some locales and
+    semicolons in others (comma is the decimal separator in much of Europe),
+    and pasted/re-saved files can end up tab-separated. The wrong delimiter
+    yields a single unsplit column, so 'most columns wins' is unambiguous.
+    """
+    best_delim, best_cols = ",", 0
+    for delimiter in _CANDIDATE_DELIMITERS:
+        cols = len(_split_header(text, delimiter))
+        if cols > best_cols:
+            best_delim, best_cols = delimiter, cols
+    return best_delim
+
+
+def _reader(text: str):
+    return csv.reader(io.StringIO(text), delimiter=_sniff_delimiter(text))
+
+
 # ---------------------------------------------------------------------------
 # Degiro
 # ---------------------------------------------------------------------------
@@ -176,6 +206,34 @@ def _currency_after(headers: list[str], row: list[str], idx: int | None) -> str 
     return None
 
 
+_CCY_RE = re.compile(r"^[A-Za-z]{3}$")
+
+
+def _money_pair(row: list[str], idx: int | None) -> tuple[float | None, str | None]:
+    """Extract (amount, currency) from a Degiro money value.
+
+    Degiro splits each money value across two adjacent columns — an amount and
+    a 3-letter currency code — but their order varies by export: classic
+    exports put the amount first and currency second, while flatexDEGIRO puts
+    the currency first and amount second. Scan both cells and assign by type so
+    either ordering works.
+    """
+    if idx is None:
+        return None, None
+    amount: float | None = None
+    currency: str | None = None
+    for cell in (_cell(row, idx), _cell(row, idx + 1)):
+        if not cell or not cell.strip():
+            continue
+        text = cell.strip()
+        num = _parse_number(text)
+        if num is not None and amount is None:
+            amount = num
+        elif _CCY_RE.match(text) and currency is None:
+            currency = text.upper()
+    return amount, currency
+
+
 def _cell(row: list[str], idx: int | None) -> str | None:
     if idx is None or idx >= len(row):
         return None
@@ -185,7 +243,7 @@ def _cell(row: list[str], idx: int | None) -> str | None:
 def parse_degiro_transactions(
     text: str, base_currency: str
 ) -> tuple[list[ImportRow], list[str]]:
-    reader = csv.reader(io.StringIO(text))
+    reader = _reader(text)
     table = [r for r in reader if any(cell.strip() for cell in r)]
     if not table:
         return [], ["File is empty"]
@@ -220,11 +278,14 @@ def parse_degiro_transactions(
         qty = _parse_number(_cell(line, idx["qty"]))
         if date is None or qty is None or qty == 0:
             continue
-        value = _parse_number(_cell(line, idx["value"])) or 0.0
-        value_ccy = _currency_after(headers, line, idx["value"]) or base_currency
-        price = _parse_number(_cell(line, idx["price"]))
-        price_ccy = _currency_after(headers, line, idx["price"])
-        fee = abs(_parse_number(_cell(line, idx["fee"])) or 0.0)
+        # Money values span an amount + currency pair in adjacent columns whose
+        # order varies by export variant (classic vs flatexDEGIRO).
+        value, value_ccy = _money_pair(line, idx["value"])
+        value = value or 0.0
+        value_ccy = value_ccy or base_currency
+        price, price_ccy = _money_pair(line, idx["price"])
+        fee_amt, _ = _money_pair(line, idx["fee"])
+        fee = abs(fee_amt or 0.0)
         fx = _parse_number(_cell(line, idx["fx"]))
         isin = (_cell(line, idx["isin"]) or "").strip().upper() or None
         product = (_cell(line, idx["product"]) or "").strip() or None
@@ -300,7 +361,7 @@ _DG_FEE_KEYWORDS = (
 def parse_degiro_account(
     text: str, base_currency: str
 ) -> tuple[list[ImportRow], list[str]]:
-    reader = csv.reader(io.StringIO(text))
+    reader = _reader(text)
     table = [r for r in reader if any(cell.strip() for cell in r)]
     if not table:
         return [], ["File is empty"]
@@ -323,11 +384,13 @@ def parse_degiro_account(
     for line in table[1:]:
         date = _degiro_date(_cell(line, idx["date"]) or "", _cell(line, idx["time"]))
         desc = (_cell(line, idx["desc"]) or "").strip()
-        change = _parse_number(_cell(line, idx["change"]))
+        # The amount and its currency occupy the "Change" column and the unnamed
+        # column next to it, in either order depending on the export variant.
+        change, change_ccy = _money_pair(line, idx["change"])
         if date is None or change is None or change == 0 or not desc:
             continue
         desc_lower = desc.lower()
-        change_ccy = _currency_after(headers, line, idx["change"]) or base_currency
+        change_ccy = change_ccy or base_currency
         isin = (_cell(line, idx["isin"]) or "").strip().upper() or None
         product = (_cell(line, idx["product"]) or "").strip() or None
         fx = _parse_number(_cell(line, idx["fx"]))
@@ -420,7 +483,7 @@ def _t212_date(raw: str) -> datetime | None:
 
 
 def parse_trading212(text: str, base_currency: str) -> tuple[list[ImportRow], list[str]]:
-    reader = csv.DictReader(io.StringIO(text))
+    reader = csv.DictReader(io.StringIO(text), delimiter=_sniff_delimiter(text))
     rows: list[ImportRow] = []
     warnings: list[str] = []
     skipped_actions: set[str] = set()
@@ -609,18 +672,42 @@ class IsinResolver:
 # ---------------------------------------------------------------------------
 
 
-def detect_format(text: str) -> tuple[str, str] | None:
-    """Return (broker, file_kind) or None."""
+def screener_headers(text: str) -> list[str]:
+    """The normalized header names of a CSV's first line (for diagnostics)."""
     first_line = text.split("\n", 1)[0]
-    headers = [_norm_header(h) for h in next(csv.reader(io.StringIO(first_line)), [])]
+    return [_norm_header(h) for h in next(_reader(first_line), []) if h]
+
+
+def detect_format(text: str) -> tuple[str, str] | None:
+    """Return (broker, file_kind) or None.
+
+    Detection keys off columns that are stable across Degiro's export
+    languages: a *Quantity* column is unique to Transactions.csv, and a running
+    *Balance/Saldo* column is unique to the Account statement (Account.csv).
+    """
+    first_line = text.split("\n", 1)[0]
+    headers = [_norm_header(h) for h in next(_reader(first_line), [])]
     header_set = set(headers)
 
     if "action" in header_set and any("no. of shares" in h for h in headers):
         return "trading212", "history"
+
     has_isin = "isin" in header_set
-    if has_isin and _find_column(headers, _DG_QTY) is not None and _find_column(headers, _DG_ORDER_ID) is not None:
+    has_qty = _find_column(headers, _DG_QTY) is not None
+    has_balance = _find_column(headers, _DG_BALANCE) is not None
+    has_desc = _find_column(headers, _DG_DESCRIPTION) is not None
+    has_change = _find_column(headers, _DG_CHANGE) is not None
+
+    # Transactions.csv — the Quantity column is unique to trade rows.
+    if has_isin and has_qty:
         return "degiro", "transactions"
-    if has_isin and _find_column(headers, _DG_DESCRIPTION) is not None and _find_column(headers, _DG_CHANGE) is not None:
+    # Account.csv — the running Balance/Saldo column is unique to the account
+    # statement and consistently named across locales (Balance / Saldo).
+    if has_balance and (has_isin or has_desc or has_change):
+        return "degiro", "account"
+    # Lenient fallback: any Degiro-shaped statement (has ISIN, no Quantity)
+    # with a description/change/balance column is treated as an account file.
+    if has_isin and not has_qty and (has_desc or has_change or has_balance):
         return "degiro", "account"
     return None
 
@@ -636,6 +723,8 @@ class ImportService:
         text = _decode(content)
         detected = detect_format(text)
         if detected is None:
+            found = screener_headers(text)
+            header_hint = ", ".join(found[:12]) if found else "no header row detected"
             return ImportPreviewResponse(
                 broker="unknown",
                 file_kind="unknown",
@@ -645,7 +734,10 @@ class ImportService:
                 unresolved_isins=[],
                 warnings=[
                     f"Could not recognize '{filename}'. Expected a Degiro "
-                    "Transactions/Account export or a Trading 212 history CSV."
+                    "Transactions/Account export or a Trading 212 history CSV.",
+                    f"Columns found: {header_hint}.",
+                    "For a Degiro account statement the file needs a "
+                    "Balance/Saldo column; for trades it needs a Quantity column.",
                 ],
             )
         broker, kind = detected

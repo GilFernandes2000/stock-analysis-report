@@ -19,6 +19,7 @@ const NAV_SECTIONS: {
     items: [
       { to: "/market", label: "Market", icon: "◉" },
       { to: "/screener", label: "Screener", icon: "☰" },
+      { to: "/favorites", label: "Favorites", icon: "★" },
     ],
   },
 ];
@@ -153,8 +154,8 @@ export function App() {
               <nav className="flex gap-1 lg:hidden">
                 {[
                   { to: "/", label: "Portfolios" },
-                  { to: "/reports", label: "Reports" },
                   { to: "/market", label: "Market" },
+                  { to: "/favorites", label: "Favorites" },
                 ].map((item) => (
                   <Link
                     key={item.to}

@@ -6,7 +6,15 @@ from apscheduler.triggers.cron import CronTrigger
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import auth, currency, portfolios, reports, screener, stocks
+from app.api import (
+    auth,
+    currency,
+    favorites,
+    portfolios,
+    reports,
+    screener,
+    stocks,
+)
 from app.config import settings
 from app.database import init_db
 from app.scheduler.jobs import run_scheduled_reports
@@ -59,6 +67,7 @@ app.include_router(stocks.router, prefix="/api")
 app.include_router(screener.router, prefix="/api")
 app.include_router(reports.router, prefix="/api")
 app.include_router(portfolios.router, prefix="/api")
+app.include_router(favorites.router, prefix="/api")
 app.include_router(currency.router, prefix="/api")
 
 

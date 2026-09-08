@@ -8,9 +8,20 @@ class ScreenerStockRow(BaseModel):
     ticker: str
     company: str | None = None
     sector: str | None = None
+    industry: str | None = None
+    country: str | None = None
+    # Display strings (as Finviz formats them)
     price: str | None = None
     change: str | None = None
     market_cap: str | None = None
+    pe: str | None = None
+    volume: str | None = None
+    # Parsed numerics for client-side sorting
+    price_value: float | None = None
+    change_pct: float | None = None
+    market_cap_value: float | None = None
+    pe_value: float | None = None
+    volume_value: float | None = None
     extra: dict[str, str] = {}
 
 

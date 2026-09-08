@@ -104,6 +104,8 @@ class TickerProfileCache:
                 "country": info.get("country"),
                 "name": info.get("longName") or info.get("shortName"),
                 "quote_type": info.get("quoteType"),
+                "market_cap": info.get("marketCap"),
+                "pe": info.get("trailingPE"),
             }
         except Exception as exc:
             logger.warning("Profile fetch failed for %s: %s", ticker, exc)
