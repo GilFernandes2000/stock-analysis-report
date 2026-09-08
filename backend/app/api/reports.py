@@ -1,4 +1,5 @@
 import json
+import logging
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -13,6 +14,9 @@ from app.schemas.report import ReportDetail, ReportGenerateRequest, ReportSummar
 from app.services.auth import get_current_user
 from app.services.report_builder import ReportBuilder
 from app.services.tearsheet import TearsheetBuilder
+from app.services.thread_pool import generation_slot
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/reports", tags=["reports"])
 
@@ -54,7 +58,10 @@ def list_reports(
 
 
 @router.get("/latest", response_model=list[ReportDetail])
-def latest_reports(db: Session = Depends(get_db)):
+def latest_reports(
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
     results = []
     for report_type in REPORT_TYPES:
         report = (
@@ -112,9 +119,15 @@ def generate_reports(
                 status_code=400, detail=f"Unknown report types: {invalid}"
             )
     try:
-        reports = builder.generate_all(types)
+        with generation_slot():
+            reports = builder.generate_all(types)
+    except HTTPException:
+        raise
     except Exception as exc:
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
+        logger.warning("Report generation failed: %s", exc)
+        raise HTTPException(
+            status_code=502, detail="Report generation failed (data source unavailable)."
+        ) from exc
     return [_to_detail(r) for r in reports]
 
 
@@ -140,7 +153,13 @@ def generate_tearsheet(
             detail=f"No transactions in: {', '.join(empty)} — import data first",
         )
     try:
-        report = TearsheetBuilder(db).build(user.id, portfolios)
+        with generation_slot():
+            report = TearsheetBuilder(db).build(user.id, portfolios)
+    except HTTPException:
+        raise
     except Exception as exc:
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
+        logger.warning("Tearsheet build failed for user %s: %s", user.id, exc)
+        raise HTTPException(
+            status_code=502, detail="Tearsheet generation failed (data source unavailable)."
+        ) from exc
     return _to_detail(report)

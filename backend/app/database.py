@@ -41,11 +41,12 @@ def _sql_literal(value: object) -> str:
 def _reconcile_columns() -> None:
     """Add columns that the models declare but an existing table is missing.
 
-    A lightweight forward-only migration for the single-file SQLite database:
-    ``create_all`` only creates missing *tables*, never alters existing ones, so
-    a database created by an earlier schema keeps its old columns. This walks
-    every mapped table and issues ``ALTER TABLE ... ADD COLUMN`` for anything
-    absent. Idempotent and safe to run on every startup.
+    Alembic (``migrations/``) is the authoritative schema tool. This helper only
+    runs on the one-time *adoption* of a pre-Alembic database (see
+    ``upgrade_database``) and as the last-resort fallback, to close the gap
+    between an old schema and the baseline before stamping. It walks every
+    mapped table and issues ``ALTER TABLE ... ADD COLUMN`` for anything absent;
+    idempotent.
     """
     insp = inspect(engine)
     existing_tables = set(insp.get_table_names())

@@ -95,6 +95,19 @@ def test_native_entry_price_none_when_no_priced_buys():
     assert pos.native_avg_cost is None
 
 
+def test_native_currency_resets_after_full_exit_then_rebuy_in_another_currency():
+    txns = [
+        _txn("buy", "2024-01-02", "SHEL", 10, -2500.0, price=250.0, currency="USD"),
+        _txn("sell", "2024-03-01", "SHEL", 10, 2800.0),
+        _txn("buy", "2024-06-01", "SHEL", 5, -1300.0, price=260.0, currency="EUR"),
+    ]
+    positions, flows = compute_positions(txns)
+    pos = positions["SHEL"]
+    assert pos.native_currency == "EUR"
+    assert abs(pos.native_avg_cost - 260.0) < 1e-6
+    assert not any("native entry price" in w for w in flows.warnings)
+
+
 def test_oversell_is_clamped_with_warning():
     txns = [
         _txn("buy", "2024-01-02", "AAPL", 2, -300.0),

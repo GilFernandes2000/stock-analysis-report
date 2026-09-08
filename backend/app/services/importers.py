@@ -12,6 +12,7 @@ import io
 import json
 import logging
 import re
+from collections import Counter
 from datetime import datetime, timedelta
 
 import yfinance as yf
@@ -841,24 +842,36 @@ class ImportService:
                 unresolved.add(row.isin)
         return unresolved
 
+    @staticmethod
+    def _dup_sig(row) -> tuple:
+        return (
+            row.date.date(),
+            row.type,
+            (row.ticker or row.isin or ""),
+            round(row.amount, 2),
+            round(row.shares or 0.0, 6),
+            round(row.price or 0.0, 6),
+        )
+
     def _flag_duplicates(self, portfolio: Portfolio, rows: list[ImportRow]) -> int:
-        existing = self.db.query(Transaction).filter(
-            Transaction.portfolio_id == portfolio.id
+        existing = list(
+            self.db.query(Transaction).filter(
+                Transaction.portfolio_id == portfolio.id
+            )
         )
         existing_ids = {t.external_id for t in existing if t.external_id}
-        existing_sigs = {
-            (t.date.date(), t.type, (t.ticker or t.isin or ""), round(t.amount, 2))
-            for t in existing
-        }
+        # A multiset: two genuinely identical transactions on the same day are
+        # only flagged as duplicates of each other one-for-one, not N-for-1.
+        remaining = Counter(self._dup_sig(t) for t in existing)
         count = 0
         for row in rows:
-            sig = (
-                row.date.date(),
-                row.type,
-                (row.ticker or row.isin or ""),
-                round(row.amount, 2),
-            )
-            if (row.external_id and row.external_id in existing_ids) or sig in existing_sigs:
+            if row.external_id and row.external_id in existing_ids:
+                row.duplicate = True
+                count += 1
+                continue
+            sig = self._dup_sig(row)
+            if remaining[sig] > 0:
+                remaining[sig] -= 1
                 row.duplicate = True
                 count += 1
         return count

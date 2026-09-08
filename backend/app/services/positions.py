@@ -163,6 +163,7 @@ def compute_positions(
                 pos.cost_basis = 0.0
                 pos.native_cost = 0.0
                 pos.native_shares = 0.0
+                pos.native_currency = None  # a re-buy may be in another currency
             pos.fees += fees
             flows.sells += abs(amount)
             flows.fees += fees
