@@ -38,9 +38,9 @@ class QuoteService:
         if not tickers:
             return [], False
 
-        profiles = {t: self.profiles.get(t) for t in tickers}
+        profiles = self.profiles.get_many(tickers)
         currencies = {
-            t: (profiles[t].get("currency") or suffix_currency(t)) for t in tickers
+            t: (profiles.get(t, {}).get("currency") or suffix_currency(t)) for t in tickers
         }
 
         pairs = fx_pairs(currencies.values(), display_currency)
@@ -60,7 +60,7 @@ class QuoteService:
 
         quotes: list[Quote] = []
         for ticker in tickers:
-            profile = profiles[ticker]
+            profile = profiles.get(ticker, {})
             native_ccy = currencies[ticker]
             native_price = None
             change_pct = None

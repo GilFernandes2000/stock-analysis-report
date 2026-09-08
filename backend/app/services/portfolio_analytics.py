@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import logging
 import math
+from concurrent.futures import ThreadPoolExecutor
 from datetime import timedelta
 
 import pandas as pd
@@ -57,8 +58,12 @@ class TickerProfileCache:
     def __init__(self, db: Session):
         self.db = db
 
+    @staticmethod
+    def _key(ticker: str) -> str:
+        return f"tickerprofile:{ticker.upper()}"
+
     def get(self, ticker: str) -> dict:
-        key = f"tickerprofile:{ticker.upper()}"
+        key = self._key(ticker)
         row = self.db.query(ApiCache).filter(ApiCache.cache_key == key).first()
         if row and utcnow() - row.created_at <= PROFILE_CACHE_TTL:
             return json.loads(row.payload)
@@ -72,6 +77,48 @@ class TickerProfileCache:
             self.db.add(ApiCache(cache_key=key, payload=payload))
         self.db.commit()
         return profile
+
+    def get_many(self, tickers: list[str]) -> dict[str, dict]:
+        """Profiles for many tickers with one DB round-trip and the cache
+        misses fetched concurrently (yfinance ``.info`` is a blocking HTTP
+        call, so a watchlist/tearsheet otherwise pays them one after another)."""
+        wanted = list(dict.fromkeys(t.upper().strip() for t in tickers if t.strip()))
+        if not wanted:
+            return {}
+
+        keys = {self._key(t): t for t in wanted}
+        rows = {
+            r.cache_key: r
+            for r in self.db.query(ApiCache).filter(ApiCache.cache_key.in_(keys)).all()
+        }
+        profiles: dict[str, dict] = {}
+        stale_or_missing: list[str] = []
+        for key, ticker in keys.items():
+            row = rows.get(key)
+            if row and utcnow() - row.created_at <= PROFILE_CACHE_TTL:
+                profiles[ticker] = json.loads(row.payload)
+            else:
+                stale_or_missing.append(ticker)
+
+        if stale_or_missing:
+            workers = min(8, len(stale_or_missing))
+            with ThreadPoolExecutor(max_workers=workers) as pool:
+                fetched = dict(
+                    zip(stale_or_missing, pool.map(self._fetch, stale_or_missing))
+                )
+            now = utcnow()
+            for ticker, profile in fetched.items():
+                payload = json.dumps(profile)
+                row = rows.get(self._key(ticker))
+                if row:
+                    row.payload = payload
+                    row.created_at = now
+                else:
+                    self.db.add(ApiCache(cache_key=self._key(ticker), payload=payload))
+                profiles[ticker] = profile
+            self.db.commit()
+
+        return profiles
 
     @staticmethod
     def _fetch(ticker: str) -> dict:
@@ -152,6 +199,7 @@ class PortfolioAnalyticsService:
         self, tickers: list[str], base_currency: str
     ) -> tuple[dict[str, float], dict[str, float]]:
         """Latest close per ticker converted to base currency + day change %."""
+        self.profiles.get_many(tickers)  # prime the cache concurrently
         currencies = {t: self._ticker_currency(t) for t in tickers}
         pairs = fx_pairs(currencies.values(), base_currency)
         symbols = list(dict.fromkeys(tickers + pairs))
@@ -193,6 +241,7 @@ class PortfolioAnalyticsService:
         # --- price history (single batch download) ---
         tickers = [p.ticker for p in open_positions]
         all_traded = sorted({p.ticker for p in positions.values()})
+        self.profiles.get_many(all_traded)  # prime the cache concurrently
         currencies = {t: self._ticker_currency(t) for t in all_traded}
         start = txns[0].date if txns else utcnow() - timedelta(days=30)
         closes: dict[str, pd.Series] = {}
@@ -214,8 +263,8 @@ class PortfolioAnalyticsService:
             txns, currencies, closes, portfolio.benchmark, base
         )
 
-        # --- position enrichment ---
-        profiles = {t: self.profiles.get(t) for t in tickers}
+        # --- position enrichment ---  (cache already primed above)
+        profiles = self.profiles.get_many(tickers)
         position_rows: list[PositionResponse] = []
         market_value = 0.0
         day_change_value = 0.0

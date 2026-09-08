@@ -10,8 +10,8 @@ def profiles(monkeypatch):
     """Canned ticker profiles keyed by symbol; no network."""
     table: dict[str, dict] = {}
     monkeypatch.setattr(
-        "app.services.portfolio_analytics.TickerProfileCache.get",
-        lambda self, ticker: table.get(ticker.upper(), {}),
+        "app.services.portfolio_analytics.TickerProfileCache._fetch",
+        staticmethod(lambda ticker: table.get(ticker.upper(), {})),
     )
     return table
 
