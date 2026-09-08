@@ -331,6 +331,8 @@ export interface Position {
   isin?: string | null;
   shares: number;
   avg_cost: number;
+  native_avg_cost?: number | null;
+  native_avg_cost_currency?: string | null;
   cost_basis: number;
   current_price?: number | null;
   native_price?: number | null;

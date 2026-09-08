@@ -130,6 +130,8 @@ class PositionResponse(BaseModel):
     isin: str | None = None
     shares: float
     avg_cost: float  # per share, base currency, fees included
+    native_avg_cost: float | None = None  # per share, in native_avg_cost_currency
+    native_avg_cost_currency: str | None = None
     cost_basis: float
     current_price: float | None = None  # base currency
     native_price: float | None = None

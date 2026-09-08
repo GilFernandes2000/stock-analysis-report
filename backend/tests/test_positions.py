@@ -11,6 +11,8 @@ def _txn(
     shares: float | None = None,
     amount: float = 0.0,
     fees: float = 0.0,
+    price: float | None = None,
+    currency: str | None = None,
 ) -> Transaction:
     return Transaction(
         portfolio_id=1,
@@ -20,6 +22,8 @@ def _txn(
         shares=shares,
         amount=amount,
         fees=fees,
+        price=price,
+        currency=currency,
     )
 
 
@@ -47,6 +51,48 @@ def test_full_sale_closes_position():
     assert not pos.is_open
     assert pos.cost_basis == 0.0
     assert abs(pos.realized_pnl - 200.0) < 1e-6
+
+
+def test_native_entry_price_weighted_average_and_partial_sell():
+    txns = [
+        _txn("buy", "2024-01-02", "AAPL", 10, -1380.0, 2.0, price=180.0, currency="USD"),
+        _txn("buy", "2024-02-02", "AAPL", 10, -1500.0, 2.0, price=200.0, currency="USD"),
+        _txn("sell", "2024-03-15", "AAPL", 4, 900.0, 1.0),
+    ]
+    positions, _ = compute_positions(txns)
+    pos = positions["AAPL"]
+    assert pos.native_currency == "USD"
+    # weighted avg entry = (10*180 + 10*200) / 20 = 190; a partial sell doesn't
+    # move the per-share average for the remaining 16 shares.
+    assert abs(pos.native_avg_cost - 190.0) < 1e-6
+    assert abs(pos.native_shares - 16.0) < 1e-6
+
+
+def test_native_entry_price_ignores_lots_without_a_price():
+    txns = [
+        _txn("buy", "2024-01-02", "AAPL", 10, -1800.0, price=180.0, currency="USD"),
+        _txn("buy", "2024-02-02", "AAPL", 10, -2000.0),  # manual entry, no price
+    ]
+    pos = compute_positions(txns)[0]["AAPL"]
+    assert abs(pos.native_avg_cost - 180.0) < 1e-6  # only the priced lot counts
+    assert pos.native_shares == 10.0
+
+
+def test_native_entry_price_skips_mismatched_currency_with_warning():
+    txns = [
+        _txn("buy", "2024-01-02", "SHEL", 10, -2500.0, price=2500.0, currency="GBp"),
+        _txn("buy", "2024-02-02", "SHEL", 5, -1300.0, price=260.0, currency="EUR"),
+    ]
+    positions, flows = compute_positions(txns)
+    pos = positions["SHEL"]
+    assert pos.native_currency == "GBp"
+    assert abs(pos.native_avg_cost - 2500.0) < 1e-6
+    assert any("native entry price" in w for w in flows.warnings)
+
+
+def test_native_entry_price_none_when_no_priced_buys():
+    pos = compute_positions([_txn("buy", "2024-01-02", "AAPL", 5, -1000.0)])[0]["AAPL"]
+    assert pos.native_avg_cost is None
 
 
 def test_oversell_is_clamped_with_warning():

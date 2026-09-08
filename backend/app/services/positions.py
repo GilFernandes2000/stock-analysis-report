@@ -33,10 +33,21 @@ class PositionState:
     fees: float = 0.0
     first_bought: datetime | None = None
     last_activity: datetime | None = None
+    # Entry price in the instrument's own currency (from Transaction.price):
+    # weighted average of buy lots that carried a native price + currency.
+    native_currency: str | None = None
+    native_cost: float = 0.0
+    native_shares: float = 0.0
 
     @property
     def avg_cost(self) -> float:
         return self.cost_basis / self.shares if self.shares > 1e-9 else 0.0
+
+    @property
+    def native_avg_cost(self) -> float | None:
+        if self.native_shares <= 1e-9:
+            return None
+        return self.native_cost / self.native_shares
 
     @property
     def is_open(self) -> bool:
@@ -73,6 +84,28 @@ class CashFlows:
         )
 
 
+def _accrue_native_cost(
+    pos: PositionState, txn: Transaction, shares: float, flows: CashFlows
+) -> None:
+    """Add a buy lot to the position's native-currency cost, if it has one."""
+    price = txn.price
+    # Keep the raw code: minor-unit currencies (GBp, GBX, ILA, ZAc) are
+    # case-sensitive for minor_divisor()/major_currency() downstream.
+    currency = (txn.currency or "").strip() or None
+    if not price or not currency or shares <= 0:
+        return
+    if pos.native_currency is None:
+        pos.native_currency = currency
+    elif currency != pos.native_currency:
+        flows.warnings.append(
+            f"{pos.ticker}: buy in {currency} differs from {pos.native_currency}; "
+            "excluded from the native entry price."
+        )
+        return
+    pos.native_cost += price * shares
+    pos.native_shares += shares
+
+
 def compute_positions(
     transactions: list[Transaction],
 ) -> tuple[dict[str, PositionState], CashFlows]:
@@ -104,6 +137,7 @@ def compute_positions(
             pos.fees += fees
             if pos.first_bought is None:
                 pos.first_bought = txn.date
+            _accrue_native_cost(pos, txn, shares, flows)
             flows.buys += abs(amount)
             flows.fees += fees
 
@@ -120,9 +154,15 @@ def compute_positions(
             avg = pos.avg_cost
             pos.realized_pnl += proceeds - avg * sold
             pos.cost_basis -= avg * sold
+            if pos.native_shares > 1e-9 and pos.shares > 1e-9:
+                keep = max(0.0, 1.0 - sold / pos.shares)
+                pos.native_cost *= keep
+                pos.native_shares *= keep
             pos.shares = max(pos.shares - shares, 0.0)
             if pos.shares <= 1e-9:
                 pos.cost_basis = 0.0
+                pos.native_cost = 0.0
+                pos.native_shares = 0.0
             pos.fees += fees
             flows.sells += abs(amount)
             flows.fees += fees

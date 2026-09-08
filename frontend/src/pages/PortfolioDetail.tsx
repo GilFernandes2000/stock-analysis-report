@@ -582,6 +582,13 @@ function HoldingsTab({ analytics: a }: { analytics: PortfolioAnalytics }) {
                 <td className="tnum px-4 py-3 text-right text-ink2">{p.shares}</td>
                 <td className="tnum px-4 py-3 text-right text-ink2">
                   {formatMoney(p.avg_cost, ccy)}
+                  {p.native_avg_cost_currency &&
+                    p.native_avg_cost_currency !== ccy &&
+                    p.native_avg_cost != null && (
+                      <span className="block text-[11px] text-muted">
+                        {formatMoney(p.native_avg_cost, p.native_avg_cost_currency)}
+                      </span>
+                    )}
                 </td>
                 <td className="tnum px-4 py-3 text-right text-ink">
                   {p.current_price != null ? formatMoney(p.current_price, ccy) : "—"}
